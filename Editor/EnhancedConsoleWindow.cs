@@ -3,12 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
-using Tools.EnhanceConsole.Editor.LogManagement;
+using EnhancedConsole.Editor.LogManagement;
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
 
-namespace Tools.EnhanceConsole.Editor
+namespace EnhancedConsole.Editor
 {
     /// <summary>
     /// EnhancedConsoleWindow: Main window coordinator for the Enhanced Console.
@@ -21,8 +21,9 @@ namespace Tools.EnhanceConsole.Editor
         private const int LOG_ENTRY_HEIGHT = 32;
         private const float DEFAULT_DETAILS_HEIGHT = 200f;
         private const string PREF_CLEAR_ON_PLAY = "EnhancedConsole_ClearOnPlay";
-        private const string PREF_CLEAR_ON_BUILD = "EnhancedConsole_ClearOnBuild";
+        internal const string PREF_CLEAR_ON_BUILD = "EnhancedConsole_ClearOnBuild";
         private const string PREF_CLEAR_ON_RECOMPILE = "EnhancedConsole_ClearOnRecompile";
+        private const string PREF_COLLAPSE = "EnhancedConsole_Collapse";
         private const string PREF_COLLAPSE_EXACT_STACKTRACE = "EnhancedConsole_CollapseExactStacktrace";
         private const string PREF_SHOW_TIME = "EnhancedConsole_ShowTime";
         private const string PREF_SHOW_STACK_TRACE = "EnhancedConsole_ShowStackTrace";
@@ -32,11 +33,10 @@ namespace Tools.EnhanceConsole.Editor
         private const double PLAY_MODE_REPAINT_INTERVAL_SECONDS = 0.1d;
 
         private static EnhancedConsoleWindow instance;
-        private static bool buildPlayerHandlerRegistered;
 
         // Core Managers (Extracted)
         private LogEntryManager logManager;
-        private CompilationStateTracker _compilationTracker;
+        [SerializeField] private List<LogEntry> _persistedLogs = new();
 
         // Selection & View State
         private int _selectedIndex = -1;
@@ -78,6 +78,7 @@ namespace Tools.EnhanceConsole.Editor
 
         // UI State
         private bool _previousCollapseState;
+        private Rect _sectionMenuScreenRect;
 
         [MenuItem("Window/Enhanced Console")]
         public static void ShowWindow()
@@ -98,7 +99,7 @@ namespace Tools.EnhanceConsole.Editor
             instance = this;
             RegisterEventHandlers();
             LoadPreferences();
-            _compilationTracker.CheckForExistingErrors();
+            RestorePersistedLogs();
         }
 
         private void InitializeComponents()
@@ -110,7 +111,6 @@ namespace Tools.EnhanceConsole.Editor
             _sectionOrganizer = _filterManager.GetSectionOrganizer();
 
             logManager = new(_filterManager);
-            _compilationTracker = new(logManager);
         }
 
         private void RegisterEventHandlers()
@@ -121,12 +121,6 @@ namespace Tools.EnhanceConsole.Editor
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             CompilationPipeline.compilationStarted += OnCompilationStarted;
             CompilationPipeline.compilationFinished += OnCompilationFinished;
-
-            if (!buildPlayerHandlerRegistered)
-            {
-                BuildPlayerWindow.RegisterBuildPlayerHandler(OnBuildPlayer);
-                buildPlayerHandlerRegistered = true;
-            }
         }
 
         private void OnDisable()
@@ -150,12 +144,16 @@ namespace Tools.EnhanceConsole.Editor
         }
 
 
-        private void OnBuildPlayer(BuildPlayerOptions options)
+        internal static void ClearForBuild()
         {
-            if (_clearOnBuild)
-                ClearLogs();
+            if (instance != null)
+                instance.ClearLogs();
+        }
 
-            BuildPlayerWindow.DefaultBuildMethods.BuildPlayer(options);
+        private void RestorePersistedLogs()
+        {
+            logManager.Restore(_persistedLogs);
+            _persistedLogs.Clear();
         }
 
         private void LoadPreferences()
@@ -163,6 +161,8 @@ namespace Tools.EnhanceConsole.Editor
             _clearOnPlay = EditorPrefs.GetBool(PREF_CLEAR_ON_PLAY, false);
             _clearOnBuild = EditorPrefs.GetBool(PREF_CLEAR_ON_BUILD, false);
             _clearOnRecompile = EditorPrefs.GetBool(PREF_CLEAR_ON_RECOMPILE, false);
+            _previousCollapseState = EditorPrefs.GetBool(PREF_COLLAPSE, false);
+            _filterManager.SetCollapse(_previousCollapseState);
             _filterManager.SetCollapseExactStacktrace(EditorPrefs.GetBool(PREF_COLLAPSE_EXACT_STACKTRACE, false));
             _showTime = EditorPrefs.GetBool(PREF_SHOW_TIME, false);
             _showStackTrace = EditorPrefs.GetBool(PREF_SHOW_STACK_TRACE, false);
@@ -185,7 +185,7 @@ namespace Tools.EnhanceConsole.Editor
 
         private void LoadSelectiveLogsConfig()
         {
-            _selectiveLogsConfig = Resources.Load<SelectiveLogsScriptableObject>("Tools/EnhanceConsole/SelectiveLogsConfig");
+            _selectiveLogsConfig = SelectiveLogsScriptableObject.FindConfig();
 
             if (_selectiveLogsConfig == null)
             {
@@ -203,6 +203,7 @@ namespace Tools.EnhanceConsole.Editor
             EditorPrefs.SetBool(PREF_CLEAR_ON_PLAY, _clearOnPlay);
             EditorPrefs.SetBool(PREF_CLEAR_ON_BUILD, _clearOnBuild);
             EditorPrefs.SetBool(PREF_CLEAR_ON_RECOMPILE, _clearOnRecompile);
+            EditorPrefs.SetBool(PREF_COLLAPSE, _filterManager.IsCollapseEnabled);
             EditorPrefs.SetBool(PREF_COLLAPSE_EXACT_STACKTRACE, _filterManager.IsCollapseExactStacktraceEnabled);
             EditorPrefs.SetBool(PREF_SHOW_TIME, _showTime);
             EditorPrefs.SetBool(PREF_SHOW_STACK_TRACE, _showStackTrace);
@@ -214,8 +215,15 @@ namespace Tools.EnhanceConsole.Editor
 
         private void OnBeforeAssemblyReload()
         {
-            if (_clearOnRecompile)
+            bool isRecompile = !EditorApplication.isPlayingOrWillChangePlaymode;
+            if (_clearOnRecompile && isRecompile)
+            {
                 ForceClearLogs();
+                _persistedLogs.Clear();
+                return;
+            }
+
+            _persistedLogs = logManager.GetPersistableEntries();
         }
 
         private void ForceClearLogs()
@@ -303,10 +311,6 @@ namespace Tools.EnhanceConsole.Editor
             instance.Repaint();
         }
 
-        private void Update()
-        {
-        }
-
         private void OnCompilationStarted(object context)
         {
             if (_clearOnRecompile)
@@ -367,7 +371,6 @@ namespace Tools.EnhanceConsole.Editor
                 }
 
                 HandleWindowFocus();
-                _compilationTracker.UpdateErrorStatus();
 
                 DrawToolbar();
                 DrawLogList();
@@ -477,6 +480,7 @@ namespace Tools.EnhanceConsole.Editor
                 _filterManager.SetCollapse(newCollapseState);
                 _previousCollapseState = newCollapseState;
                 logManager.RebuildWithCollapse();
+                SavePreferences();
             }
             else
             {
@@ -676,14 +680,42 @@ namespace Tools.EnhanceConsole.Editor
             GUI.backgroundColor = originalColor;
 
             Rect dropdownRect = GUILayoutUtility.GetRect(new GUIContent("▼"), EditorStyles.toolbarDropDown, GUILayout.Width(15));
+            if (Event.current.type == EventType.Repaint)
+                _sectionMenuScreenRect = GUIUtility.GUIToScreenRect(dropdownRect);
+
             if (GUI.Button(dropdownRect, "▼", EditorStyles.toolbarDropDown))
             {
                 GenericMenu menu = new();
+                menu.AddItem(new GUIContent("Sections..."), false, ShowSectionMenu);
+                menu.AddSeparator("");
                 menu.AddItem(new GUIContent("Stack And Content"), _sectionOrganizer.GetFilterMode == SLFilterMode.StackAndContent, SetSectionFilterMode_StackAndContent);
                 menu.AddItem(new GUIContent("Only Stack"), _sectionOrganizer.GetFilterMode == SLFilterMode.OnlyStack, SetSectionFilterMode_OnlyStack);
                 menu.AddItem(new GUIContent("Only Content"), _sectionOrganizer.GetFilterMode == SLFilterMode.OnlyContent, SetSectionFilterMode_OnlyContent);
                 menu.DropDown(dropdownRect);
             }
+        }
+
+        private void ShowSectionMenu()
+        {
+            if (_selectiveLogsConfig == null)
+                return;
+
+            SelectiveLogSection[] sections = _selectiveLogsConfig.GetAllSections();
+            Dictionary<string, bool> states = new();
+            foreach (SelectiveLogSection section in sections)
+                states[section.name] = section.enabled;
+
+            SectionLogsMenuWindow.Show(_sectionMenuScreenRect, sections, states, () => ApplySectionStates(sections, states));
+        }
+
+        private void ApplySectionStates(SelectiveLogSection[] sections, Dictionary<string, bool> states)
+        {
+            foreach (SelectiveLogSection section in sections)
+                section.enabled = states[section.name];
+
+            EditorUtility.SetDirty(_selectiveLogsConfig);
+            _sectionOrganizer.RefreshSectionStates();
+            Repaint();
         }
 
         private void SetSectionFilterMode_StackAndContent()

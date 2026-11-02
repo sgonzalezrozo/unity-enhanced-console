@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Tools.EnhanceConsole.Editor.LogManagement
+namespace EnhancedConsole.Editor.LogManagement
 {
     /// <summary>
     /// Manages log entry lifecycle: adding, clearing, filtering, and compression.
@@ -35,7 +35,6 @@ namespace Tools.EnhanceConsole.Editor.LogManagement
 			Message = message,
 			StackTrace = stackTrace,
 			Type = type,
-			Timestamp = DateTime.Now,
 			RealtimeSinceStartup = Time.realtimeSinceStartup,
 			Count = 1,
 			ContextGameObjectInstanceId = contextGameObjectId
@@ -46,7 +45,6 @@ namespace Tools.EnhanceConsole.Editor.LogManagement
                 Message = message,
                 StackTrace = stackTrace,
                 Type = type,
-                Timestamp = DateTime.Now,
                 RealtimeSinceStartup = Time.realtimeSinceStartup,
                 Count = 1,
                 ContextGameObjectInstanceId = contextGameObjectId
@@ -72,6 +70,21 @@ namespace Tools.EnhanceConsole.Editor.LogManagement
         {
             logEntries.Clear();
             originalLogEntries.Clear();
+        }
+
+        public List<LogEntry> GetPersistableEntries()
+        {
+            return new List<LogEntry>(originalLogEntries);
+        }
+
+        public void Restore(List<LogEntry> entries)
+        {
+            if (entries == null || entries.Count == 0)
+                return;
+
+            Clear();
+            originalLogEntries.AddRange(entries);
+            RebuildWithCollapse();
         }
 
         public void RebuildWithCollapse()
@@ -172,7 +185,6 @@ namespace Tools.EnhanceConsole.Editor.LogManagement
                 Message = entry.Message,
                 StackTrace = entry.StackTrace,
                 Type = entry.Type,
-                Timestamp = entry.Timestamp,
                 RealtimeSinceStartup = entry.RealtimeSinceStartup,
                 Count = 1,
                 ContextGameObjectInstanceId = entry.ContextGameObjectInstanceId

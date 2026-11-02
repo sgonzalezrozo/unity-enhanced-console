@@ -26,7 +26,6 @@ In a large live project, the log you need is often buried in hundreds of others.
 
 - Have a small project and Unity's Console is enough
 - Need to view logs from device builds. Enhanced Console only runs in the Unity Editor.
-- Need logs to survive a domain reload
 - Need logs from background threads
 
 ## Features
@@ -35,11 +34,12 @@ In a large live project, the log you need is often buried in hundreds of others.
 - Case-insensitive search across messages and stack traces
 - Toggles and counts for info, warning and error logs
 - Collapsing by message and type, with an optional exact stack trace match
-- Section filtering by name or regex, with custom sections and colors
+- Section filtering by name or regex, with custom sections, colors and quick toggles
 - Stack trace panel with clickable file links
 - GameObject selection for logs written with a context object
 - Multi-select, copy and optional timestamps
 - Clear on Play, Clear on Build and Clear on Recompile options
+- Logs preserved across domain reloads while the window is open
 - Recompile and Recompile + Asset Refresh buttons
 
 ## Compatibility
@@ -50,7 +50,7 @@ In a large live project, the log you need is often buried in hundreds of others.
 | Editor platforms | **TODO:** list tested platforms |
 | Editor themes | **TODO:** confirm light and dark |
 | IDEs | Uses your External Script Editor setting. **TODO:** list tested IDEs. |
-| Player builds | The package code is Editor-only. See [Limitations](#limitations) for the section config. |
+| Player builds | The package is Editor-only and adds nothing to player builds. |
 | Dependencies | None |
 
 ## Installation
@@ -88,10 +88,10 @@ Section filtering is optional. It lets you hide logs from selected systems while
 
 ### Set it up
 
-1. Run **Tools > Enhance Console System > Setup**. This creates `Assets/Resources/Tools/EnhanceConsole/SelectiveLogsConfig.asset` with five default sections.
+1. Run **Tools > Enhanced Console > Setup**. This creates `Assets/EnhancedConsole/SelectiveLogsConfig.asset` with five default sections, or moves an existing config there.
 2. Select the asset to rename sections, change colors, add your own or turn on regex.
-3. Clear a section's checkbox to hide its logs.
-4. Turn on the **SL** button in the console toolbar.
+3. Turn on the **SL** button in the console toolbar.
+4. Select the arrow beside **SL**, choose **Sections...**, then clear a section to hide its logs.
 
 ### How logs match a section
 
@@ -110,7 +110,7 @@ The first matching section wins, and logs that match no section stay visible.
 
 ### Filter modes
 
-Select the arrow beside the **SL** button:
+Select the arrow beside the **SL** button, then choose a mode:
 
 | Mode | Searches |
 |---|---|
@@ -150,8 +150,9 @@ Select the arrow beside the **SL** button:
 
 - Enhanced Console uses `Application.logMessageReceived`, so it captures main-thread logs only.
 - The window stores up to 10,000 entries in memory.
-- Logs are stored in memory, so a domain reload clears them. That includes a successful recompile and, with default settings, entering Play Mode.
-- **Clear on Recompile** also clears logs when compilation starts.
+- Logs are kept across domain reloads while the window is open, including after a recompile or entering Play Mode.
+- **Clear on Recompile** clears logs when scripts recompile.
+- Closing the window or restarting Unity clears stored logs.
 - While the window is open, Enhanced Console wraps `Debug.unityLogger.logHandler` in the Editor to read each log's context object. Every log is forwarded to the original handler, and the wrapper stays in place until the next domain reload.
 - Double-click opens the first project frame in the stack trace. Custom logger wrappers aren't skipped, so a wrapper's own line may open instead of its caller.
 - **Clear** also clears Unity's Console through the internal `UnityEditor.LogEntries` API, which a future Unity version could change.
@@ -177,9 +178,9 @@ For contributors:
 
 | Problem | Try this |
 |---|---|
-| The **SL** button shows `--/--` | Run **Tools > Enhance Console System > Setup** |
+| The **SL** button shows `--/--` | Run **Tools > Enhanced Console > Setup** |
 | A log isn't in a section | Check that the section name or regex matches the log, and check the filter mode |
-| Older logs are missing | Logs are cleared by domain reloads and only captured while the window is open |
+| Older logs are missing | Logs are only captured while the window is open, so keep it docked |
 | Clicking a log doesn't select a GameObject | Pass a GameObject or Component as the log's context, and check that the object is still loaded |
 | A log opens the wrong file | Check whether a custom logger wrapper is the first project frame in the stack trace |
 | A stack trace line isn't clickable | Only paths starting with `Assets/` or `Packages/` are clickable |
@@ -187,11 +188,9 @@ For contributors:
 
 ## Limitations
 
-- Logs aren't kept after a domain reload.
+- Logs aren't kept after closing the window or restarting Unity.
 - The log handler wrapper adds a `LogContextHandler` frame to stack traces, so double-clicking a log in Unity's own Console can open that file instead of your code.
 - Logs aren't captured from background threads or device builds.
-- The section config sits in `Assets/Resources`, so it's included in player builds even though the package is Editor-only.
-- Section enablement is managed in the config asset, not the toolbar.
 
 ## Project status
 

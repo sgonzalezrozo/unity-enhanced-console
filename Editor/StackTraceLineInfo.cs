@@ -1,5 +1,5 @@
 #if UNITY_EDITOR
-namespace Tools.EnhanceConsole.Editor
+namespace EnhancedConsole.Editor
 {
     internal struct StackTraceLineInfo
     {

@@ -1,6 +1,6 @@
 {
   "name": "com.sgonzalezrozo.enhanced-console",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "Enhanced Console",
   "description": "A Unity Editor console for faster log triage in large projects, with search, collapse modes and section-based filtering.",
   "unity": "2022.3",

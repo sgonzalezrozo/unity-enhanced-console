@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-namespace Tools.EnhanceConsole.Editor
+namespace EnhancedConsole.Editor
 {
 	/// <summary>
 	/// Interface for log type filtering.

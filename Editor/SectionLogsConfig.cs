@@ -1,7 +1,7 @@
 #if UNITY_EDITOR
 using UnityEngine;
 
-namespace Tools.EnhanceConsole.Editor
+namespace EnhancedConsole.Editor
 {
     public static class SectionLogsConfig
     {

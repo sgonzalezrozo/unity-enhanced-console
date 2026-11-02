@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEditorInternal;
 using UnityEngine;
 
-namespace Tools.EnhanceConsole.Editor
+namespace EnhancedConsole.Editor
 {
     [CustomEditor(typeof(SelectiveLogsScriptableObject))]
     public class SelectiveLogsScriptableObjectEditor : UnityEditor.Editor

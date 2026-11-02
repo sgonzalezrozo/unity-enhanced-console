@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Tools.EnhanceConsole.Editor
+namespace EnhancedConsole.Editor
 {
 	/// <summary>
 	/// Manages section-based log organization and filtering.
