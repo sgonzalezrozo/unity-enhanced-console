@@ -2,7 +2,7 @@
 using System.Text;
 using UnityEngine;
 
-namespace Tools.EnhanceConsole.Editor
+namespace EnhancedConsole.Editor
 {
 	/// <summary>
 	/// Formats log entries for display and clipboard operations.

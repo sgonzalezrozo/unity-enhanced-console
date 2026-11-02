@@ -2,7 +2,7 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace Tools.EnhanceConsole.Editor
+namespace EnhancedConsole.Editor
 {
     public class SelectiveLogsScriptableObject : ScriptableObject
     {
@@ -12,23 +12,42 @@ namespace Tools.EnhanceConsole.Editor
         public System.Collections.Generic.IReadOnlyList<SelectiveLogSection> SystemDefinedSections => systemDefinedSections;
         public System.Collections.Generic.IReadOnlyList<SelectiveLogSection> UserDefinedSections => userDefinedSections;
 
-        [MenuItem("Tools/Enhance Console System/Setup", false, 1)]
+        private const string CONFIG_FOLDER = "Assets/EnhancedConsole";
+        private const string CONFIG_PATH = CONFIG_FOLDER + "/SelectiveLogsConfig.asset";
+
+        public static SelectiveLogsScriptableObject FindConfig()
+        {
+            string[] guids = AssetDatabase.FindAssets("t:SelectiveLogsScriptableObject");
+            if (guids.Length == 0)
+                return null;
+
+            string path = AssetDatabase.GUIDToAssetPath(guids[0]);
+            return AssetDatabase.LoadAssetAtPath<SelectiveLogsScriptableObject>(path);
+        }
+
+        [MenuItem("Tools/Enhanced Console/Setup", false, 1)]
         public static void CreateSelectiveLogsConfig()
         {
-            string resourcesPath = "Assets/Resources/Tools/EnhanceConsole";
-            if (!System.IO.Directory.Exists(resourcesPath))
-                System.IO.Directory.CreateDirectory(resourcesPath);
+            if (!AssetDatabase.IsValidFolder(CONFIG_FOLDER))
+                AssetDatabase.CreateFolder("Assets", "EnhancedConsole");
 
-            string assetPath = System.IO.Path.Combine(resourcesPath, "SelectiveLogsConfig.asset");
-            SelectiveLogsScriptableObject config = AssetDatabase.LoadAssetAtPath<SelectiveLogsScriptableObject>(assetPath);
+            SelectiveLogsScriptableObject config = FindConfig();
             if (config == null)
             {
                 config = ScriptableObject.CreateInstance<SelectiveLogsScriptableObject>();
                 config.InitializeDefaultSections();
-                AssetDatabase.CreateAsset(config, assetPath);
+                AssetDatabase.CreateAsset(config, CONFIG_PATH);
             }
             else
             {
+                string currentPath = AssetDatabase.GetAssetPath(config);
+                if (currentPath != CONFIG_PATH)
+                {
+                    string error = AssetDatabase.MoveAsset(currentPath, CONFIG_PATH);
+                    if (!string.IsNullOrEmpty(error))
+                        Debug.LogWarning($"[EnhancedConsole] Could not move config: {error}");
+                }
+
                 config.InitializeDefaultSections();
                 EditorUtility.SetDirty(config);
             }

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-namespace Tools.EnhanceConsole.Editor
+namespace EnhancedConsole.Editor
 {
     public class SectionLogsMenuWindow : EditorWindow
     {
@@ -39,6 +39,7 @@ namespace Tools.EnhanceConsole.Editor
             window.position = new Rect(position, size);
 
             window.ShowPopup();
+            window.Focus();
         }
 
         private void OnGUI()

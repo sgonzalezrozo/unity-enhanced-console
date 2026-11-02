@@ -1,5 +1,5 @@
 {
-    "name": "tools-enhanceconsole.Editor",
+    "name": "EnhancedConsole.Editor",
     "rootNamespace": "",
     "references": [],
     "includePlatforms": [
