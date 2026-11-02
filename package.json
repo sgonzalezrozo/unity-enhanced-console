@@ -1,0 +1,18 @@
+{
+  "name": "com.sgonzalezrozo.enhanced-console",
+  "version": "0.1.0",
+  "displayName": "Enhanced Console",
+  "description": "A Unity Editor console for faster log triage in large projects, with search, collapse modes and section-based filtering.",
+  "unity": "2022.3",
+  "license": "MIT",
+  "author": {
+    "name": "Santiago González Rozo",
+    "url": "https://github.com/sgonzalezrozo"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sgonzalezrozo/unity-enhanced-console.git"
+  },
+  "keywords": ["console", "logging", "debugging", "editor"],
+  "dependencies": {}
+}
