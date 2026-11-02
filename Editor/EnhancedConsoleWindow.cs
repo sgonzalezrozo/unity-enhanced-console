@@ -115,7 +115,7 @@ namespace Tools.EnhanceConsole.Editor
 
         private void RegisterEventHandlers()
         {
-            LogContextBridge.Initialize();
+            LogContextHelper.Initialize();
             Application.logMessageReceived += HandleLog;
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;

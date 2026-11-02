@@ -52,7 +52,7 @@ namespace Tools.EnhanceConsole.Editor.LogManagement
                 ContextGameObjectInstanceId = contextGameObjectId
             });
 
-            bool prunedOriginalEntries = PruneOriginalIfExceedsLimit();
+            PruneOriginalIfExceedsLimit();
 
             if (filterManager.IsCollapseEnabled)
             {
@@ -60,17 +60,12 @@ namespace Tools.EnhanceConsole.Editor.LogManagement
                 if (existing != null)
                 {
                     existing.Count++;
-                    if (prunedOriginalEntries)
-                        RebuildWithCollapse();
                     return;
                 }
             }
 
             logEntries.Add(newEntry);
             PruneVisibleIfExceedsLimit();
-
-            if (prunedOriginalEntries && filterManager.IsCollapseEnabled)
-                RebuildWithCollapse();
         }
 
         public void Clear()
@@ -116,13 +111,20 @@ namespace Tools.EnhanceConsole.Editor.LogManagement
             return filterManager.FilterLogs(logEntries);
         }
 
-        private bool PruneOriginalIfExceedsLimit()
+        private void PruneOriginalIfExceedsLimit()
         {
             if (originalLogEntries.Count <= MAX_LOG_ENTRIES)
-                return false;
+                return;
 
+            LogEntry oldest = originalLogEntries[0];
             originalLogEntries.RemoveAt(0);
-            return true;
+
+            if (!filterManager.IsCollapseEnabled)
+                return;
+
+            LogEntry group = FindExistingInList(logEntries, oldest);
+            if (group != null && --group.Count <= 0)
+                logEntries.Remove(group);
         }
 
         private void PruneVisibleIfExceedsLimit()
@@ -171,6 +173,7 @@ namespace Tools.EnhanceConsole.Editor.LogManagement
                 StackTrace = entry.StackTrace,
                 Type = entry.Type,
                 Timestamp = entry.Timestamp,
+                RealtimeSinceStartup = entry.RealtimeSinceStartup,
                 Count = 1,
                 ContextGameObjectInstanceId = entry.ContextGameObjectInstanceId
             };
@@ -179,11 +182,11 @@ namespace Tools.EnhanceConsole.Editor.LogManagement
 	private static int TryExtractGameObjectContextId(string message, string stackTrace)
 	{
 		// First, try to get context from LogContextHelper (captures Unity's Debug.Log context parameter)
-		int contextId = LogContextBridge.GetLastLogContextInstanceId();
+		int contextId = LogContextHelper.GetLastLogContextInstanceId();
 		if (contextId != 0)
 		{
 			// Clear the context after use
-			LogContextBridge.ClearLogContext();
+			LogContextHelper.ClearLogContext();
 			return contextId;
 		}
 

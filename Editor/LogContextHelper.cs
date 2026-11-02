@@ -12,12 +12,14 @@ namespace Tools.EnhanceConsole.Editor
             defaultLogHandler = Debug.unityLogger.logHandler;
         }
 
+        [HideInCallstack]
         public void LogFormat(LogType logType, Object context, string format, params object[] args)
         {
             CaptureContext(context);
             defaultLogHandler.LogFormat(logType, context, format, args);
         }
 
+        [HideInCallstack]
         public void LogException(System.Exception exception, Object context)
         {
             CaptureContext(context);
