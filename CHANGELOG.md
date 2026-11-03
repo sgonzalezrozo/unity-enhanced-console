@@ -2,6 +2,15 @@
 
 All notable changes to this package are documented in this file.
 
+## [Unreleased]
+
+### Documentation
+
+- Added a before and after example, a Unity Console comparison and section recipes.
+- Documented how copying and the time column work.
+- Added contributing, security and issue template files, and a Quick Start sample.
+- Removed an out-of-date internal note from `EnhancedConsoleWindow`.
+
 ## [0.2.0] - Unreleased
 
 ### Added

@@ -3,16 +3,27 @@
 **A Unity Editor console for faster log triage in large projects.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Tested on Unity 6000.3](https://img.shields.io/badge/Unity-6000.3%20tested-black?logo=unity)](#compatibility)
+[![Version 0.2.0](https://img.shields.io/badge/version-0.2.0-blue.svg)](CHANGELOG.md)
 
 Enhanced Console runs beside Unity's Console and helps you cut through noisy logs with search, collapse modes and section-based filtering. Select a log to read its stack trace, then click through to the source line.
 
-> **TODO:** Add a screenshot or GIF showing section filtering and a click from a stack trace to source code.
+| Everything, all at once | With the `Networking` section hidden |
+|---|---|
+| `[Networking] Packet 1042 received` | |
+| `[Networking] Packet 1043 received` | |
+| `[Shop] Purchase failed: not enough coins` | `[Shop] Purchase failed: not enough coins` |
+| `[Networking] Packet 1044 received` | |
+
+<!-- Demo GIF: Documentation~/images/demo.gif -->
 
 ## Why I built it
 
-In a large live project, the log you need is often buried in hundreds of others. Unity's Console is enough for many projects, but I wanted to group logs by system and get from a failing log to its code faster.
+I started this console in part to copy a range of logs without their stack traces. Then I realized I also needed to filter logs in more ways than a search bar allows.
 
-> **TODO:** Replace this with your own story: which debugging problem made you build it, and what Unity's Console could not do.
+So I added a selective filter system next to the traditional search. Each project sets up its own filters in a ScriptableObject, and they can match the log, the stack trace or both.
+
+I also thought it would be great to show a time on each log, as a simple measurement for developers while playing in the Editor.
 
 ## Is it right for your project?
 
@@ -37,19 +48,36 @@ In a large live project, the log you need is often buried in hundreds of others.
 - Section filtering by name or regex, with custom sections, colors and quick toggles
 - Stack trace panel with clickable file links
 - GameObject selection for logs written with a context object
-- Multi-select, copy and optional timestamps
+- Multi-select, copy and optional log times
 - Clear on Play, Clear on Build and Clear on Recompile options
 - Logs preserved across domain reloads while the window is open
 - Recompile and Recompile + Asset Refresh buttons
+
+## Compared with Unity's Console
+
+Enhanced Console runs beside Unity's Console and doesn't replace it.
+
+| | Unity's Console | Enhanced Console |
+|---|---|---|
+| Search and log level toggles | Yes | Yes |
+| Collapse | Yes | Yes, with an optional exact stack trace match |
+| Clear on Play, Build and Recompile | Yes | Yes |
+| Hide logs by system | No | Yes, with sections |
+| Regex matching | No | Yes, per section |
+| Copy a range of logs | Depends on the Unity version | Yes, with or without stack traces |
+| Pause on error | Yes | No |
+| Logs from before the window opened | Yes | No |
+| Logs from background threads | Yes | No |
+| Logs from device builds | Yes, by connecting to the player | No |
 
 ## Compatibility
 
 | Requirement | Supported |
 |---|---|
-| Unity | 2022.3 or newer. **TODO:** add tested versions. |
-| Editor platforms | **TODO:** list tested platforms |
-| Editor themes | **TODO:** confirm light and dark |
-| IDEs | Uses your External Script Editor setting. **TODO:** list tested IDEs. |
+| Unity | Tested on Unity 6 (`6000.3.16f1`). The package declares `2022.3` as its minimum, but older versions aren't tested yet. |
+| Editor platforms | Not verified yet |
+| Editor themes | Light and dark are both handled in code, but neither is verified yet |
+| IDEs | Uses your External Script Editor setting. Tested IDEs aren't published yet. |
 | Player builds | The package is Editor-only and adds nothing to player builds. |
 | Dependencies | None |
 
@@ -118,6 +146,36 @@ Select the arrow beside the **SL** button, then choose a mode:
 | Only Stack | The stack trace only |
 | Only Content | The message only |
 
+### Section recipes
+
+Sections are checked in order: the five default sections first, then your own. The first match decides whether a log is shown.
+
+**Match a namespace.** Name the section after the namespace, then set the filter mode to **Only Stack**. Unity's stack traces include the full type name, so this matches every log written from that code, whatever the message says:
+
+| Section name | Matches |
+|---|---|
+| `MyGame.Networking` | Logs from any class in that namespace |
+
+**Match a tag at the start of a message.** Turn on **Regex** and use **Only Content**:
+
+```text
+^\[(Net|Socket)\]
+```
+
+**Match several folders.** Turn on **Regex** and use **Only Stack**:
+
+```text
+Assets/Features/(Shop|Inventory)/
+```
+
+**Match a whole word.** Plain matching finds `Net` inside `Network` and `Planet`. A regex avoids that:
+
+```text
+\bNet\b
+```
+
+If a regex is invalid, the section falls back to matching its name as plain text.
+
 ## Using the toolbar
 
 | Control | Purpose |
@@ -127,7 +185,7 @@ Select the arrow beside the **SL** button, then choose a mode:
 | Collapse | Group repeated logs with the same message and type |
 | Collapse arrow | Also require an exact stack trace match |
 | Stack Trace | Show or hide the resizable stack trace panel |
-| Time | Show or hide timestamps |
+| Time | Show or hide each log's time, in `mm:ss.mmm`, from `Time.realtimeSinceStartup` |
 | Recompile | Request a script recompile, available outside Play Mode |
 | Recompile arrow | Choose Recompile Only or Recompile and Asset Refresh |
 | Search | Find plain text in messages and stack traces, ignoring case |
@@ -143,7 +201,7 @@ Select the arrow beside the **SL** button, then choose a mode:
 | Shift-click | Select a range |
 | Ctrl-click or Cmd-click | Add or remove a log from the selection |
 | Ctrl+A or Cmd+A | Select all visible logs |
-| Ctrl+C or Cmd+C | Copy selected logs |
+| Ctrl+C or Cmd+C | Copy selected logs. Stack traces are included only while **Stack Trace** is on. |
 | Double-click | Open the log's source file |
 
 ## How log capture works
@@ -157,7 +215,8 @@ Select the arrow beside the **SL** button, then choose a mode:
 - Double-click opens the first project frame in the stack trace. Custom logger wrappers aren't skipped, so a wrapper's own line may open instead of its caller.
 - **Clear** also clears Unity's Console through the internal `UnityEditor.LogEntries` API, which a future Unity version could change.
 
-> **TODO:** Test whether compiler errors appear reliably, then document the result.
+
+Enhanced Console only shows what reaches `Application.logMessageReceived`. It doesn't read compiler results directly, and whether compiler errors always appear hasn't been verified yet. If your scripts stop compiling, check Unity's Console.
 
 ## Architecture
 
@@ -181,6 +240,8 @@ For contributors:
 | The **SL** button shows `--/--` | Run **Tools > Enhanced Console > Setup** |
 | A log isn't in a section | Check that the section name or regex matches the log, and check the filter mode |
 | Older logs are missing | Logs are only captured while the window is open, so keep it docked |
+| Copied logs have no stack traces | Turn on **Stack Trace** before copying |
+| A regex section matches by name instead | Check the pattern, because an invalid regex falls back to the section name |
 | Clicking a log doesn't select a GameObject | Pass a GameObject or Component as the log's context, and check that the object is still loaded |
 | A log opens the wrong file | Check whether a custom logger wrapper is the first project frame in the stack trace |
 | A stack trace line isn't clickable | Only paths starting with `Assets/` or `Packages/` are clickable |
@@ -196,11 +257,13 @@ For contributors:
 
 Enhanced Console is a pre-release package at version `0.2.0`. Its API and behavior may change before `1.0.0`.
 
-> **TODO:** Add a roadmap link and breaking-change policy.
+Until `1.0.0`, minor versions (`0.x.0`) can include breaking changes, and patch versions (`0.x.y`) don't. Breaking changes are marked **Breaking** in the [changelog](CHANGELOG.md).
+
+There's no public roadmap yet. Known gaps are listed under [Limitations](#limitations), and planned work is tracked in [issues](https://github.com/sgonzalezrozo/unity-enhanced-console/issues).
 
 ## Contributing
 
-Bug reports and pull requests are welcome. Please open an issue before starting a large change.
+Bug reports and pull requests are welcome. Please open an issue before starting a large change. See the [contributing guide](.github/CONTRIBUTING.md) and [security policy](.github/SECURITY.md).
 
 ## Related packages
 
@@ -210,6 +273,8 @@ Bug reports and pull requests are welcome. Please open an issue before starting 
 | [Screen System](https://github.com/sgonzalezrozo/unity-screen-system) | Declarative UI navigation |
 | [UI Tweens](https://github.com/sgonzalezrozo/unity-ui-tweens) | ECS-based UI animation |
 | [Recyclable Scroller](https://github.com/sgonzalezrozo/unity-recyclable-scroller) | Virtualized lists |
+
+Enhanced Console has no dependencies, so it doesn't need [Tools Core](https://github.com/sgonzalezrozo/unity-tools-core).
 
 ## License
 
