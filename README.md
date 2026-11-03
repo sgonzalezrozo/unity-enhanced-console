@@ -68,7 +68,7 @@ https://github.com/sgonzalezrozo/unity-enhanced-console.git
 To pin a release, add its tag:
 
 ```text
-https://github.com/sgonzalezrozo/unity-enhanced-console.git#v0.1.0
+https://github.com/sgonzalezrozo/unity-enhanced-console.git#v0.2.0
 ```
 
 ## Quick start
@@ -194,7 +194,7 @@ For contributors:
 
 ## Project status
 
-Enhanced Console is a pre-release package at version `0.1.0`. Its API and behavior may change before `1.0.0`.
+Enhanced Console is a pre-release package at version `0.2.0`. Its API and behavior may change before `1.0.0`.
 
 > **TODO:** Add a roadmap link and breaking-change policy.
 
