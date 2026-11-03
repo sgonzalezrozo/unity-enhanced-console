@@ -13,7 +13,6 @@ namespace EnhancedConsole.Editor
     /// <summary>
     /// EnhancedConsoleWindow: Main window coordinator for the Enhanced Console.
     /// Responsibility: Orchestrate window lifecycle and delegate to focused components.
-    /// This class should remain ~100-120 lines following SOLID principles.
     /// </summary>
     public class EnhancedConsoleWindow : EditorWindow
     {
