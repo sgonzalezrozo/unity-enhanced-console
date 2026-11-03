@@ -3,7 +3,7 @@
 **A Unity Editor console for faster log triage in large projects.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Unity 2022.3+](https://img.shields.io/badge/Unity-2022.3%2B-black?logo=unity)](#compatibility)
+[![Tested on Unity 6000.3](https://img.shields.io/badge/Unity-6000.3%20tested-black?logo=unity)](#compatibility)
 [![Version 0.2.0](https://img.shields.io/badge/version-0.2.0-blue.svg)](CHANGELOG.md)
 
 Enhanced Console runs beside Unity's Console and helps you cut through noisy logs with search, collapse modes and section-based filtering. Select a log to read its stack trace, then click through to the source line.
@@ -74,7 +74,7 @@ Enhanced Console runs beside Unity's Console and doesn't replace it.
 
 | Requirement | Supported |
 |---|---|
-| Unity | 2022.3 or newer. This is the declared minimum. Tested versions aren't published yet. |
+| Unity | Tested on Unity 6 (`6000.3.16f1`). The package declares `2022.3` as its minimum, but older versions aren't tested yet. |
 | Editor platforms | Not verified yet |
 | Editor themes | Light and dark are both handled in code, but neither is verified yet |
 | IDEs | Uses your External Script Editor setting. Tested IDEs aren't published yet. |
