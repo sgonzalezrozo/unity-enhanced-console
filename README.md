@@ -25,6 +25,8 @@ So I added a selective filter system next to the traditional search. Each projec
 
 I also thought it would be great to show a time on each log, as a simple measurement for developers while playing in the Editor.
 
+I built and refined it on my own time, reusing it across my projects. In November 2026 I extracted it into this standalone package and documented it. Earlier history lives in a private repository.
+
 ## Is it right for your project?
 
 **Use Enhanced Console if you:**
