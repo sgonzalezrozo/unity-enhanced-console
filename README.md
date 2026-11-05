@@ -25,7 +25,7 @@ So I added a selective filter system next to the traditional search. Each projec
 
 I also thought it would be great to show a time on each log, as a simple measurement for developers while playing in the Editor.
 
-I built and refined it on my own time, reusing it across my projects. In November 2026 I extracted it into this standalone package and documented it. Earlier history lives in a private repository.
+I built and refined it on my own time in personal projects. It isn't used in production yet. In November 2026 I extracted it into this standalone package and documented it. Earlier history lives in a private repository.
 
 ## Is it right for your project?
 
@@ -257,7 +257,7 @@ For contributors:
 
 ## Project status
 
-Enhanced Console is a pre-release package at version `0.3.0`. Its API and behavior may change before `1.0.0`.
+Enhanced Console is a pre-release package at version `0.3.0`. Its API and behavior may change before `1.0.0`. Not yet used in a shipped game.
 
 Until `1.0.0`, minor versions (`0.x.0`) can include breaking changes, and patch versions (`0.x.y`) don't. Breaking changes are marked **Breaking** in the [changelog](CHANGELOG.md).
 

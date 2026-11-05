@@ -2,6 +2,12 @@
 
 All notable changes to this package are documented in this file.
 
+## [Unreleased]
+
+### Documentation
+
+- Said that the package isn't used in production or in a shipped game yet.
+
 ## [0.3.0] - 2026-11-03
 
 ### Documentation
