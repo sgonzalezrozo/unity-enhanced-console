@@ -1,6 +1,6 @@
 # Enhanced Console
 
-> Unity Editor console window for Unity 6 that runs beside Unity's Console: section-based log filtering by name or regex, search across messages and stack traces, collapse modes, log timestamps, clickable stack traces, multi-select and copying logs with or without stack traces. Editor-only, no dependencies, no logging API required. MIT licensed, pre-release (0.x).
+> Unity Editor console window for Unity 6 that runs beside Unity's Console: section-based log filtering by name or regex, search across messages and stack traces, collapse modes, log timestamps, clickable stack traces, multi-select and copying logs with or without stack traces. Editor-only, no dependencies, no logging API required. MIT licensed, pre-release (0.x), single author, no other users yet.
 
 ## Docs
 

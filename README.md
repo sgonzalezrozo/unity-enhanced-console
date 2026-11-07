@@ -6,9 +6,7 @@
 [![Tested on Unity 6000.3](https://img.shields.io/badge/Unity-6000.3%20tested-black?logo=unity)](#compatibility)
 [![Version 0.3.0](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
 
-Enhanced Console is a free, open-source Unity Editor console window for Unity 6 that adds regex and section-based log filtering, stack trace search, log timestamps and copying log ranges without stack traces. It runs beside Unity's Console, adds nothing to player builds, and needs no special logging API.
-
-Enhanced Console runs beside Unity's Console and helps you cut through noisy logs with search, collapse modes and section-based filtering. Select a log to read its stack trace, then click through to the source line.
+Enhanced Console is a free, open-source Unity Editor console window for Unity 6, for cutting through noisy logs. It adds section-based and regex log filtering, search across messages and stack traces, log timestamps, and copying a range of logs with or without stack traces. Click a stack trace line to open the source. It runs beside Unity's Console, adds nothing to player builds, and needs no special logging API.
 
 | Everything, all at once | With the `Networking` section hidden |
 |---|---|
@@ -265,7 +263,23 @@ Yes. It's tested on Unity `6000.3`. The package declares `2022.3` as its minimum
 
 ### Does it work with AI coding agents?
 
-Agents read Unity's Console through Unity MCP or batch-mode logs, so Enhanced Console doesn't change what they see. Plain `[Tag]` prefixes in messages make sections match, and they also make logs easier for agents to search.
+Not directly. Agents read Unity's Console through Unity MCP or batch-mode logs, so Enhanced Console doesn't change what they see. Plain `[Tag]` prefixes in messages make sections match, and they also make logs easier for agents to search.
+
+### Is there a better console for Unity?
+
+There are several Editor console replacements. Enhanced Console is a free one that adds sections, regex, timestamps and range copying beside Unity's own Console, rather than replacing it. See [Is it right for your project?](#is-it-right-for-your-project).
+
+### How do I hide noisy logs in the Unity Console?
+
+Put a tag in the message, such as `[Networking]`, create a section with that name, and clear it in the **SL** menu. Everything else stays visible. See [Section filtering](#section-filtering).
+
+### How do I install it?
+
+In Unity, open **Window > Package Manager**, select **+ > Add package from git URL** and enter `https://github.com/sgonzalezrozo/unity-enhanced-console.git`. See [Installation](#installation).
+
+### Is it production-ready? Does anyone use it?
+
+Not yet. Enhanced Console is a pre-release package (`0.x`) by a single author. It isn't used in a shipped game, and it has no other users yet, so expect rough edges and API changes before `1.0.0`. Bug reports are very welcome. See [Project status](#project-status).
 
 ### Is it free for commercial use?
 

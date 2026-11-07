@@ -2,7 +2,7 @@
   "name": "com.sgonzalezrozo.enhanced-console",
   "version": "0.3.0",
   "displayName": "Enhanced Console",
-  "description": "A Unity Editor console for faster log triage in large projects, with search, collapse modes and section-based filtering.",
+  "description": "Unity Editor console window for noisy logs: section and regex filtering, stack trace search, log timestamps and copying log ranges with or without stack traces. Editor-only.",
   "unity": "2022.3",
   "license": "MIT",
   "author": {
