@@ -6,6 +6,10 @@ All notable changes to this package are documented in this file.
 
 ### Documentation
 
+- An FAQ, `llms.txt` and more package keywords.
+
+### Documentation
+
 - Said that the package isn't used in production or in a shipped game yet.
 
 ## [0.3.0] - 2026-11-03

@@ -6,6 +6,8 @@
 [![Tested on Unity 6000.3](https://img.shields.io/badge/Unity-6000.3%20tested-black?logo=unity)](#compatibility)
 [![Version 0.3.0](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
 
+Enhanced Console is a free, open-source Unity Editor console window for Unity 6 that adds regex and section-based log filtering, stack trace search, log timestamps and copying log ranges without stack traces. It runs beside Unity's Console, adds nothing to player builds, and needs no special logging API.
+
 Enhanced Console runs beside Unity's Console and helps you cut through noisy logs with search, collapse modes and section-based filtering. Select a log to read its stack trace, then click through to the source line.
 
 | Everything, all at once | With the `Networking` section hidden |
@@ -234,6 +236,40 @@ For contributors:
 | `SectionedLogOrganizer` | Applies section rules and filter modes |
 | `StackTraceParser` | Extracts file paths and line numbers |
 | `LogContextHelper` | Captures the context object passed with a log |
+
+## FAQ
+
+### How do I filter Debug.Log messages by system in Unity?
+
+Create sections in Enhanced Console, named after a tag or namespace, or with a regex, then hide the sections you don't need. Logs need no special API. See [Section filtering](#section-filtering).
+
+### Enhanced Console vs Unity's Console?
+
+It runs beside Unity's Console and adds sections, regex, timestamps and range copying. Unity's Console still covers background threads, device builds and pause on error. See [Compared with Unity's Console](#compared-with-unitys-console).
+
+### Can I copy several logs without their stack traces?
+
+Yes. Select a range, turn off **Stack Trace**, and press Ctrl+C or Cmd+C.
+
+### Does it show logs from device builds?
+
+No. It only runs in the Unity Editor.
+
+### Does it add anything to my build?
+
+No. The package is Editor-only.
+
+### Does it work with Unity 6?
+
+Yes. It's tested on Unity `6000.3`. The package declares `2022.3` as its minimum, but older versions aren't tested yet.
+
+### Does it work with AI coding agents?
+
+Agents read Unity's Console through Unity MCP or batch-mode logs, so Enhanced Console doesn't change what they see. Plain `[Tag]` prefixes in messages make sections match, and they also make logs easier for agents to search.
+
+### Is it free for commercial use?
+
+Yes. It's MIT licensed.
 
 ## Troubleshooting
 

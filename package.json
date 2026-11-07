@@ -13,7 +13,23 @@
     "type": "git",
     "url": "https://github.com/sgonzalezrozo/unity-enhanced-console.git"
   },
-  "keywords": ["console", "logging", "debugging", "editor"],
+  "keywords": [
+    "console",
+    "logging",
+    "debugging",
+    "editor",
+    "unity",
+    "unity3d",
+    "unity6",
+    "unity-package",
+    "upm",
+    "csharp",
+    "gamedev",
+    "log-filter",
+    "debug-log",
+    "editor-window",
+    "editor-tool"
+  ],
   "samples": [
     {
       "displayName": "Quick Start",

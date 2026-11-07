@@ -1,0 +1,12 @@
+# Enhanced Console
+
+> Unity Editor console window for Unity 6 that runs beside Unity's Console: section-based log filtering by name or regex, search across messages and stack traces, collapse modes, log timestamps, clickable stack traces, multi-select and copying logs with or without stack traces. Editor-only, no dependencies, no logging API required. MIT licensed, pre-release (0.x).
+
+## Docs
+
+- [README](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/README.md): installation, quick start, API, troubleshooting, FAQ
+- [Changelog](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/CHANGELOG.md)
+
+## Optional
+
+- [Unity Architecture Agents](https://github.com/sgonzalezrozo/unity-architecture-agents): architecture rules and a verify loop for AI coding agents on Unity
