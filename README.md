@@ -49,7 +49,7 @@ I built and refined it on my own time in personal projects. It isn't used in pro
 - Collapsing by message and type, with an optional exact stack trace match
 - Section filtering by name or regex, with custom sections, colors and quick toggles
 - Stack trace panel with clickable file links
-- GameObject selection for logs written with a context object
+- Selecting the context object of a log: its GameObject, or the asset it was logged with
 - Multi-select, copy and optional log times
 - Clear on Play, Clear on Build and Clear on Recompile options
 - Logs preserved across domain reloads while the window is open
@@ -108,7 +108,7 @@ https://github.com/sgonzalezrozo/unity-enhanced-console.git#v0.3.1
 3. Use the toolbar to search, filter and collapse entries.
 4. Turn on **Stack Trace** and select a log to see its stack trace.
 5. Double-click a log, or click a linked stack trace line, to open the source file.
-6. Click a log written with a context object, such as `Debug.Log(message, gameObject)`, to select that GameObject.
+6. Click a log written with a context object, such as `Debug.Log(message, gameObject)`, to select that GameObject. A Component selects its GameObject, and an asset is pinged in the Project window.
 
 Logs written before the window opens are not shown, so keep it docked.
 
@@ -198,7 +198,7 @@ If a regex is invalid, the section falls back to matching its name as plain text
 
 | Action | Result |
 |---|---|
-| Click | Select a log and its context GameObject, if it has one |
+| Click | Select a log and its context object, if it has one |
 | Up and Down arrows | Move the selection |
 | Shift-click | Select a range |
 | Ctrl-click or Cmd-click | Add or remove a log from the selection |
@@ -227,7 +227,6 @@ For contributors:
 | Type | Purpose |
 |---|---|
 | `EnhancedConsoleWindow` | Coordinates the UI and editor integration |
-| `ConsoleViewRenderer` | Renders console styles and views |
 | `LogEntryManager` | Stores, groups and rebuilds log entries |
 | `LogFilterManager` | Combines log level, search and section filters |
 | `ConsoleSearchEngine` | Handles message and stack trace search |

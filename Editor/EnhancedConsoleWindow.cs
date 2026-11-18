@@ -29,7 +29,11 @@ namespace EnhancedConsole.Editor
         private const string PREF_DETAILS_HEIGHT = "EnhancedConsole_DetailsHeight";
         private const string PREF_SL_FILTER_MODE = "EnhancedConsole_SL_FilterMode";
         private const string PREF_RECOMPILE_MODE = "EnhancedConsole_RecompileMode";
-        private const double PLAY_MODE_REPAINT_INTERVAL_SECONDS = 0.1d;
+        private const float STACK_TRACE_LINE_HEIGHT = 16f;
+
+        // New logs mark the window dirty; it repaints at most this often instead of once (plus a
+        // queued delayCall) per log, and only when something changed.
+        private const double REPAINT_INTERVAL_SECONDS = 1d / 30d;
 
         private static EnhancedConsoleWindow instance;
 
@@ -54,7 +58,6 @@ namespace EnhancedConsole.Editor
         private bool _recompileWithAssetRefresh;
 
         private float _detailsHeight = DEFAULT_DETAILS_HEIGHT;
-        private bool _isInPlayMode;
 
         // Preferences
         private SelectiveLogsScriptableObject _selectiveLogsConfig;
@@ -63,7 +66,6 @@ namespace EnhancedConsole.Editor
         private LogLevelColorScheme _colorScheme;
         private LogEntryFormatter _formatter;
         private StackTraceParser _stackTraceParser;
-        private ConsoleViewRenderer _viewRenderer;
         private LogFilterManager _filterManager;
         private SectionedLogOrganizer _sectionOrganizer;
         private bool _isStylesInitialized;
@@ -72,7 +74,28 @@ namespace EnhancedConsole.Editor
         private GUIStyle _logCountStyle;
         private GUIStyle _stackTraceLineStyle;
         private GUIStyle _stackTraceLineClickableStyle;
-        private double _lastPlayModeRepaintTime;
+        private bool _repaintPending;
+        private double _lastRepaintTime;
+        private bool _guiErrorLogged;
+
+        // Selection is stored by index into the filtered view; the entry is kept so the selection
+        // can be found again when the view is rebuilt (filter change, collapse, pruning).
+        private LogEntry _selectedEntry;
+        private int _seenFilteredResetCount = -1;
+
+        // Stack trace panel cache, rebuilt only when the selected stack trace changes.
+        private string _cachedStackTrace;
+        private string[] _stackTraceLines = Array.Empty<string>();
+        private StackTraceLineInfo[] _stackTraceLineInfos = Array.Empty<StackTraceLineInfo>();
+
+        // Toolbar content, updated only when the values change.
+        private readonly GUIContent _infoToggleContent = new();
+        private readonly GUIContent _warningToggleContent = new();
+        private readonly GUIContent _errorToggleContent = new();
+        private int _shownInfoCount = -1;
+        private int _shownWarningCount = -1;
+        private int _shownErrorCount = -1;
+        private string _shownTitle;
 
 
         // UI State
@@ -105,7 +128,7 @@ namespace EnhancedConsole.Editor
         {
             _colorScheme = new();
             _stackTraceParser = new();
-            _viewRenderer = new(_colorScheme, _formatter ?? (_formatter = new(true, false)));
+            _formatter ??= new(true, false);
             _filterManager = new();
             _sectionOrganizer = _filterManager.GetSectionOrganizer();
 
@@ -115,7 +138,9 @@ namespace EnhancedConsole.Editor
         private void RegisterEventHandlers()
         {
             LogContextHelper.Initialize();
+            LogContextHelper.ClearLogContext();
             Application.logMessageReceived += HandleLog;
+            EditorApplication.update += OnEditorUpdate;
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             CompilationPipeline.compilationStarted += OnCompilationStarted;
@@ -127,15 +152,12 @@ namespace EnhancedConsole.Editor
             UnregisterEventHandlers();
             SavePreferences();
             _isStylesInitialized = false;
-
-            // Clean up play mode refresh handler
-            if (_isInPlayMode)
-                EditorApplication.update -= RefreshDuringPlayMode;
         }
 
         private void UnregisterEventHandlers()
         {
             Application.logMessageReceived -= HandleLog;
+            EditorApplication.update -= OnEditorUpdate;
             EditorApplication.playModeStateChanged -= OnPlayModeChanged;
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             CompilationPipeline.compilationStarted -= OnCompilationStarted;
@@ -147,6 +169,12 @@ namespace EnhancedConsole.Editor
         {
             if (instance != null)
                 instance.ClearLogs();
+        }
+
+        internal static void RepaintIfOpen()
+        {
+            if (instance != null)
+                instance.Repaint();
         }
 
         private void RestorePersistedLogs()
@@ -230,6 +258,7 @@ namespace EnhancedConsole.Editor
             ClearUnityConsole();
             logManager.Clear();
             _selectedIndex = -1;
+            _selectedEntry = null;
             _multiSelectedIndices.Clear();
             Repaint();
         }
@@ -272,20 +301,14 @@ namespace EnhancedConsole.Editor
             switch (state)
             {
                 case PlayModeStateChange.EnteredPlayMode:
-                    _isInPlayMode = true;
                     if (instance != null)
                     {
                         instance.Focus();
                         instance.Repaint();
                     }
-
-                    // Add frequent refresh updates during play mode
-                    EditorApplication.update += RefreshDuringPlayMode;
                     break;
 
                 case PlayModeStateChange.ExitingPlayMode:
-                    _isInPlayMode = false;
-                    EditorApplication.update -= RefreshDuringPlayMode;
                     if (instance != null)
                         instance.Repaint();
                     break;
@@ -297,17 +320,18 @@ namespace EnhancedConsole.Editor
             }
         }
 
-        private void RefreshDuringPlayMode()
+        private void OnEditorUpdate()
         {
-            if (!_isInPlayMode || instance == null)
+            if (!_repaintPending)
                 return;
 
             double now = EditorApplication.timeSinceStartup;
-            if (now - _lastPlayModeRepaintTime < PLAY_MODE_REPAINT_INTERVAL_SECONDS)
+            if (now - _lastRepaintTime < REPAINT_INTERVAL_SECONDS)
                 return;
 
-            _lastPlayModeRepaintTime = now;
-            instance.Repaint();
+            _repaintPending = false;
+            _lastRepaintTime = now;
+            Repaint();
         }
 
         private void OnCompilationStarted(object context)
@@ -333,24 +357,10 @@ namespace EnhancedConsole.Editor
 
         private void HandleLog(string message, string stackTrace, LogType type)
         {
-            logManager.AddLog(message, stackTrace, type);
-            RepaintWindow();
-        }
-
-        private void RepaintWindow()
-        {
-            if (instance != null)
-            {
-                instance.Repaint();
-                EditorApplication.delayCall += DelayedRepaint;
-            }
-        }
-
-        private void DelayedRepaint()
-        {
-            EditorApplication.delayCall -= DelayedRepaint;
-            if (instance != null)
-                instance.Repaint();
+            // The context handler runs just before this callback on the same thread.
+            int contextInstanceId = LogContextHelper.ConsumeLogContextInstanceId();
+            logManager.AddLog(message, stackTrace, type, contextInstanceId);
+            _repaintPending = true;
         }
 
 
@@ -358,13 +368,12 @@ namespace EnhancedConsole.Editor
         {
             try
             {
-                if (_viewRenderer == null)
+                if (logManager == null)
                     InitializeComponents();
 
                 // Lazy initialize styles when EditorStyles are ready (first GUI call)
                 if (!_isStylesInitialized)
                 {
-                    _viewRenderer.InitializeStyles();
                     InitializeStyles();
                     _isStylesInitialized = true;
                 }
@@ -380,31 +389,40 @@ namespace EnhancedConsole.Editor
                 DrawDetailsPanel();
                 DrawResizeHandle();
             }
-            catch (System.Exception ex)
+            catch (ExitGUIException)
             {
-                EditorGUILayout.HelpBox($"EnhancedConsole Error: {ex.Message}\n{ex.StackTrace}", MessageType.Error);
+                // Unity uses this to abort the current GUI event on purpose.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Drawing a HelpBox here would unbalance the layout groups that were open when the
+                // exception was thrown. Log once instead of on every repaint, then abort the event cleanly.
+                if (!_guiErrorLogged)
+                {
+                    _guiErrorLogged = true;
+                    Debug.LogException(ex);
+                }
+
+                GUIUtility.ExitGUI();
             }
         }
 
         private void HandleWindowFocus()
         {
-            if (!_hadFocus && hasFocus)
-            {
-                _hadFocus = true;
+            // Searching the AssetDatabase is slow in large projects, so only look again when there's no config.
+            if (!_hadFocus && hasFocus && _selectiveLogsConfig == null)
                 LoadSelectiveLogsConfig();
-                _sectionOrganizer.RefreshSectionStates();
-            }
 
             _hadFocus = hasFocus;
 
-            if (_selectiveLogsConfig != null)
-                _sectionOrganizer.RefreshSectionStates();
+            // Cheap: hashes the section fields and recompiles only when the config was edited.
+            _sectionOrganizer.RefreshSectionStates();
         }
 
         private void DrawToolbar()
         {
-            string compilationStatus = GetCompilationStatusForTitle();
-            titleContent = new GUIContent($" Console {compilationStatus} ");
+            UpdateTitle();
 
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
 
@@ -525,9 +543,12 @@ namespace EnhancedConsole.Editor
         {
             Color originalColor = GUI.backgroundColor;
             GUI.backgroundColor = _showTime ? _colorScheme.ToggleButtonActive : Color.white;
-            _showTime = GUILayout.Toggle(_showTime, "Time", EditorStyles.toolbarButton, GUILayout.Width(50));
-            if (GUI.changed)
+            bool newShowTime = GUILayout.Toggle(_showTime, "Time", EditorStyles.toolbarButton, GUILayout.Width(50));
+            if (newShowTime != _showTime)
+            {
+                _showTime = newShowTime;
                 SavePreferences();
+            }
             GUI.backgroundColor = originalColor;
         }
 
@@ -589,12 +610,17 @@ namespace EnhancedConsole.Editor
             Debug.Log("[Force Recompile] This may take a moment. Check Console for 'Compilation finished'.");
         }
 
-        private string GetCompilationStatusForTitle()
+        private void UpdateTitle()
         {
-            if (!Application.isPlaying)
-                return "";
+            string title = Application.isPlaying
+                ? $" Console | Total: {logManager.Entries.Count} - Filtered: {GetFilteredLogs().Count} "
+                : " Console  ";
 
-            return $"| Total: {logManager.GetEntries().Count} - Filtered: {GetFilteredLogs().Count}";
+            if (title == _shownTitle)
+                return;
+
+            _shownTitle = title;
+            titleContent = new GUIContent(title);
         }
 
         private void DrawSearchField()
@@ -610,35 +636,44 @@ namespace EnhancedConsole.Editor
 
         private void DrawLogTypeToggles()
         {
-            List<LogEntry> logs = logManager.GetEntries();
-            int infoCount = _filterManager.GetInfoCount(logs);
-            int warningCount = _filterManager.GetWarningCount(logs);
-            int errorCount = _filterManager.GetErrorCount(logs);
+            UpdateCountContent(_infoToggleContent, ref _shownInfoCount, logManager.InfoCount, LogType.Log);
+            UpdateCountContent(_warningToggleContent, ref _shownWarningCount, logManager.WarningCount, LogType.Warning);
+            UpdateCountContent(_errorToggleContent, ref _shownErrorCount, logManager.ErrorCount, LogType.Error);
 
             Color originalColor = GUI.backgroundColor;
 
             GUI.backgroundColor = _filterManager.IsShowingInfo ? Color.white : _colorScheme.DisabledButton;
             bool newShowInfo = GUILayout.Toggle(_filterManager.IsShowingInfo,
-                new GUIContent($" {infoCount}", EditorGUIUtility.IconContent("console.infoicon").image),
+                _infoToggleContent,
                 EditorStyles.toolbarButton, GUILayout.Width(50));
             if (newShowInfo != _filterManager.IsShowingInfo)
                 _filterManager.SetShowInfo(newShowInfo);
 
             GUI.backgroundColor = _filterManager.IsShowingWarnings ? Color.white : _colorScheme.DisabledButton;
             bool newShowWarnings = GUILayout.Toggle(_filterManager.IsShowingWarnings,
-                new GUIContent($" {warningCount}", EditorGUIUtility.IconContent("console.warnicon").image),
+                _warningToggleContent,
                 EditorStyles.toolbarButton, GUILayout.Width(50));
             if (newShowWarnings != _filterManager.IsShowingWarnings)
                 _filterManager.SetShowWarnings(newShowWarnings);
 
             GUI.backgroundColor = _filterManager.IsShowingErrors ? Color.white : _colorScheme.DisabledButton;
             bool newShowErrors = GUILayout.Toggle(_filterManager.IsShowingErrors,
-                new GUIContent($" {errorCount}", EditorGUIUtility.IconContent("console.erroricon").image),
+                _errorToggleContent,
                 EditorStyles.toolbarButton, GUILayout.Width(50));
             if (newShowErrors != _filterManager.IsShowingErrors)
                 _filterManager.SetShowErrors(newShowErrors);
 
             GUI.backgroundColor = originalColor;
+        }
+
+        private static void UpdateCountContent(GUIContent content, ref int shownCount, int count, LogType type)
+        {
+            content.image = LogEntryFormatter.GetIconForLogType(type);
+            if (count == shownCount)
+                return;
+
+            shownCount = count;
+            content.text = " " + count;
         }
 
         private void DrawSectionLogsButton()
@@ -655,9 +690,8 @@ namespace EnhancedConsole.Editor
                 return;
             }
 
-            SelectiveLogSection[] allSections = _selectiveLogsConfig.GetAllSections();
             int activeSections = _sectionOrganizer.GetActiveSectionCount();
-            int totalSections = allSections.Length;
+            int totalSections = _sectionOrganizer.GetTotalSectionCount();
 
             bool allActive = activeSections == totalSections;
             GUI.backgroundColor = _sectionOrganizer.IsFilterActive
@@ -702,15 +736,24 @@ namespace EnhancedConsole.Editor
             SelectiveLogSection[] sections = _selectiveLogsConfig.GetAllSections();
             Dictionary<string, bool> states = new();
             foreach (SelectiveLogSection section in sections)
-                states[section.name] = section.enabled;
+            {
+                if (section != null && section.name != null)
+                    states[section.name] = section.enabled;
+            }
 
             SectionLogsMenuWindow.Show(_sectionMenuScreenRect, sections, states, () => ApplySectionStates(sections, states));
         }
 
         private void ApplySectionStates(SelectiveLogSection[] sections, Dictionary<string, bool> states)
         {
+            if (_selectiveLogsConfig == null)
+                return;
+
             foreach (SelectiveLogSection section in sections)
-                section.enabled = states[section.name];
+            {
+                if (section != null && section.name != null && states.TryGetValue(section.name, out bool enabled))
+                    section.enabled = enabled;
+            }
 
             EditorUtility.SetDirty(_selectiveLogsConfig);
             _sectionOrganizer.RefreshSectionStates();
@@ -770,6 +813,10 @@ namespace EnhancedConsole.Editor
             }
 
             HandleLogListInput(filteredLogs);
+
+            _selectedEntry = _selectedIndex >= 0 && _selectedIndex < filteredLogs.Count
+                ? filteredLogs[_selectedIndex]
+                : null;
         }
 
         private void DrawLogListEntry(List<LogEntry> filteredLogs, int i, Rect scrollViewRect)
@@ -803,7 +850,7 @@ namespace EnhancedConsole.Editor
         private void DrawLogIcon(Rect entryRect, LogEntry log)
         {
             Rect iconRect = new(entryRect.x + 15, entryRect.y + 8, 16, 16);
-            GUI.DrawTexture(iconRect, _formatter.GetIconForLogType(log.Type));
+            GUI.DrawTexture(iconRect, LogEntryFormatter.GetIconForLogType(log.Type));
         }
 
         private void DrawLogMessage(Rect entryRect, LogEntry log)
@@ -816,9 +863,7 @@ namespace EnhancedConsole.Editor
 
             Rect textRect = new(textStartX, entryRect.y + 2, availableTextWidth, LOG_ENTRY_HEIGHT);
 
-            string displayText = _formatter.TruncateMessage(log.Message);
-
-            GUI.Label(textRect, displayText, _logMessageStyle);
+            GUI.Label(textRect, log.DisplayText, _logMessageStyle);
         }
 
         private void DrawLogTime(Rect entryRect, LogEntry log)
@@ -829,8 +874,7 @@ namespace EnhancedConsole.Editor
             float timeWidth = 60f;
             Rect timeRect = new(entryRect.xMax - 5 - 20 - timeWidth, entryRect.y + 2, timeWidth - 5, LOG_ENTRY_HEIGHT);
 
-            string timeText = _formatter.FormatTimeDisplay(log.RealtimeSinceStartup);
-            GUI.Label(timeRect, timeText, _logTimeStyle);
+            GUI.Label(timeRect, log.TimeText, _logTimeStyle);
         }
 
         private void DrawCollapseCount(Rect entryRect, LogEntry log, int index)
@@ -995,8 +1039,8 @@ namespace EnhancedConsole.Editor
 
             Rect scrollViewRect = new(stackTraceRect.x + 4, stackTraceRect.y + 4, stackTraceRect.width - 8, stackTraceRect.height - 8);
 
-            string[] stackTraceLines = stackTrace.Split('\n');
-            float totalContentHeight = stackTraceLines.Length * 16f;
+            EnsureStackTraceCache(stackTrace);
+            float totalContentHeight = _stackTraceLines.Length * STACK_TRACE_LINE_HEIGHT;
 
             try
             {
@@ -1008,7 +1052,7 @@ namespace EnhancedConsole.Editor
                     totalContentHeight > scrollViewRect.height
                 );
 
-                DrawStackTraceLines(stackTraceLines, scrollViewRect);
+                DrawStackTraceLines(scrollViewRect);
             }
             finally
             {
@@ -1016,25 +1060,40 @@ namespace EnhancedConsole.Editor
             }
         }
 
-        private void DrawStackTraceLines(string[] stackTraceLines, Rect scrollViewRect)
+        // Splitting and parsing (which includes an AssetDatabase lookup per line) happen once per
+        // selected stack trace, not once per line on every GUI event.
+        private void EnsureStackTraceCache(string stackTrace)
         {
-            float lineHeight = 16f;
+            if (stackTrace == _cachedStackTrace)
+                return;
 
-            for (int i = 0; i < stackTraceLines.Length; i++)
+            _cachedStackTrace = stackTrace;
+            _stackTraceLines = stackTrace.Split('\n');
+            _stackTraceLineInfos = new StackTraceLineInfo[_stackTraceLines.Length];
+            for (int i = 0; i < _stackTraceLines.Length; i++)
+                _stackTraceLineInfos[i] = _stackTraceParser.ParseLine(_stackTraceLines[i]);
+        }
+
+        private void DrawStackTraceLines(Rect scrollViewRect)
+        {
+            // Only the visible lines are drawn.
+            int first = Mathf.Max(0, Mathf.FloorToInt(_detailsScrollPosition.y / STACK_TRACE_LINE_HEIGHT));
+            int last = Mathf.Min(_stackTraceLines.Length - 1,
+                first + Mathf.CeilToInt(scrollViewRect.height / STACK_TRACE_LINE_HEIGHT) + 1);
+
+            for (int i = first; i <= last; i++)
             {
-                string line = stackTraceLines[i];
+                string line = _stackTraceLines[i];
                 if (string.IsNullOrEmpty(line))
                     continue;
 
-                Rect lineRect = new(0, i * lineHeight, scrollViewRect.width - 20, lineHeight);
-                DrawStackTraceLine(lineRect, line, _stackTraceLineStyle, _stackTraceLineClickableStyle);
+                Rect lineRect = new(0, i * STACK_TRACE_LINE_HEIGHT, scrollViewRect.width - 20, STACK_TRACE_LINE_HEIGHT);
+                DrawStackTraceLine(lineRect, line, _stackTraceLineInfos[i], _stackTraceLineStyle, _stackTraceLineClickableStyle);
             }
         }
 
-        private void DrawStackTraceLine(Rect lineRect, string line, GUIStyle normalStyle, GUIStyle clickableStyle)
+        private void DrawStackTraceLine(Rect lineRect, string line, StackTraceLineInfo lineInfo, GUIStyle normalStyle, GUIStyle clickableStyle)
         {
-            StackTraceLineInfo lineInfo = _stackTraceParser.ParseLine(line);
-
             if (lineInfo.HasFileInfo)
             {
                 if (GUI.Button(lineRect, "", GUIStyle.none))
@@ -1135,20 +1194,32 @@ namespace EnhancedConsole.Editor
                 float minLogListHeight = 120f;
                 float maxDetailsHeight = position.height - TOOLBAR_HEIGHT - minLogListHeight - 10;
                 _detailsHeight = Mathf.Clamp(position.height - currentEvent.mousePosition.y, 100f, maxDetailsHeight);
-                SavePreferences();
                 Repaint();
                 currentEvent.Use();
             }
             else if (currentEvent.type == EventType.MouseUp)
             {
+                // Writing EditorPrefs on every drag event is slow, so save once at the end.
                 _isResizingDetails = false;
+                SavePreferences();
                 currentEvent.Use();
             }
         }
 
+        /// <summary>Cached filtered view; cheap to call several times per GUI event. Don't modify the list.</summary>
         private List<LogEntry> GetFilteredLogs()
         {
-            return _filterManager.FilterLogs(logManager.GetEntries());
+            List<LogEntry> logs = logManager.GetFilteredEntries();
+
+            // When the view was rebuilt, indices point at different logs: find the selected log again.
+            if (logManager.FilteredResetCount != _seenFilteredResetCount)
+            {
+                _seenFilteredResetCount = logManager.FilteredResetCount;
+                _selectedIndex = _selectedEntry != null ? logs.IndexOf(_selectedEntry) : -1;
+                _multiSelectedIndices.Clear();
+            }
+
+            return logs;
         }
 
         private void CopySelectedEntries(List<LogEntry> filteredLogs)
@@ -1235,63 +1306,13 @@ namespace EnhancedConsole.Editor
 
         private void TrySelectGameObjectInHierarchy(LogEntry logEntry)
         {
-            if (logEntry.ContextGameObjectInstanceId == 0)
+            // O(1) lookup instead of walking every loaded scene and then every object.
+            UnityEngine.Object target = LogContextHelper.ResolveContextObject(logEntry.ContextGameObjectInstanceId);
+            if (target == null)
                 return;
 
-            GameObject targetGameObject = null;
-
-            // Search in ALL loaded scenes
-            for (int i = 0; i < UnityEngine.SceneManagement.SceneManager.sceneCount; i++)
-            {
-                UnityEngine.SceneManagement.Scene scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(i);
-                if (!scene.isLoaded)
-                    continue;
-
-                foreach (GameObject go in scene.GetRootGameObjects())
-                {
-                    targetGameObject = FindGameObjectByInstanceId(go, logEntry.ContextGameObjectInstanceId);
-                    if (targetGameObject != null)
-                        break;
-                }
-
-                if (targetGameObject != null)
-                    break;
-            }
-
-             // If not found in scenes, search in DontDestroyOnLoad
-             if (targetGameObject == null)
-             {
-                 GameObject[] allObjects = GameObject.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
-                 foreach (GameObject go in allObjects)
-                {
-                    if (go.GetInstanceID() == logEntry.ContextGameObjectInstanceId)
-                    {
-                        targetGameObject = go;
-                        break;
-                    }
-                }
-            }
-
-            if (targetGameObject == null)
-                return;
-
-            EditorGUIUtility.PingObject(targetGameObject);
-            Selection.activeGameObject = targetGameObject;
-        }
-
-        private GameObject FindGameObjectByInstanceId(GameObject root, int instanceId)
-        {
-            if (root.GetInstanceID() == instanceId)
-                return root;
-
-            foreach (Transform child in root.transform)
-            {
-                GameObject result = FindGameObjectByInstanceId(child.gameObject, instanceId);
-                if (result != null)
-                    return result;
-            }
-
-            return null;
+            EditorGUIUtility.PingObject(target);
+            Selection.activeObject = target;
         }
     }
 }

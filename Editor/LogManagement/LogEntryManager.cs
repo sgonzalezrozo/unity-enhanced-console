@@ -6,75 +6,108 @@ using UnityEngine;
 namespace EnhancedConsole.Editor.LogManagement
 {
     /// <summary>
-    /// Manages log entry lifecycle: adding, clearing, filtering, and compression.
+    /// Manages log entry lifecycle: adding, clearing, collapsing and the cached filtered view.
     /// Single Responsibility: Log storage and lifecycle only.
     /// </summary>
     internal class LogEntryManager
     {
         private const int MAX_LOG_ENTRIES = 10000;
 
-        private readonly List<LogEntry> logEntries = new();
-        private readonly List<LogEntry> originalLogEntries = new();
+        // Entries are removed in chunks so the list isn't shifted on every log once it is full,
+        // and the filtered view is rebuilt once per chunk instead of once per log.
+        private const int PRUNE_CHUNK = 1000;
+
+        private readonly List<LogEntry> allEntries = new();
+        private readonly List<LogEntry> collapsedEntries = new();
+        private readonly Dictionary<CollapseKey, LogEntry> collapseGroups = new();
         private readonly LogFilterManager filterManager;
 
-        public int TotalCount => logEntries.Count;
-        public int OriginalCount => originalLogEntries.Count;
+        // Counts per level for each view: [info, warning, error].
+        private readonly int[] allCounts = new int[3];
+        private readonly int[] collapsedCounts = new int[3];
+
+        private bool builtCollapsed;
+        private bool builtExactStacktrace;
+
+        // Bumped when entries are removed, reordered or regrouped. Appends don't bump it.
+        private int structureVersion = 1;
+
+        /// <summary>Time source for new entries. Replaceable so the storage logic can be tested outside Unity.</summary>
+        internal static Func<float> Clock = () => Time.realtimeSinceStartup;
+
+        private readonly List<LogEntry> filteredEntries = new();
+        private int filteredStructureVersion;
+        private int filteredFilterVersion = -1;
+        private int filteredSourceCount;
+
+        /// <summary>Bumped each time the filtered view is rebuilt from scratch, so indices into it are stale.</summary>
+        public int FilteredResetCount { get; private set; }
 
         public LogEntryManager(LogFilterManager filterManager)
         {
             this.filterManager = filterManager ?? throw new ArgumentNullException(nameof(filterManager));
         }
 
-	public void AddLog(string message, string stackTrace, LogType type)
-	{
-		int contextGameObjectId = TryExtractGameObjectContextId(message, stackTrace);
+        public int InfoCount => CurrentCounts[0];
+        public int WarningCount => CurrentCounts[1];
+        public int ErrorCount => CurrentCounts[2];
 
+        /// <summary>The unfiltered view: every entry, or one entry per group while collapsed.</summary>
+        public IReadOnlyList<LogEntry> Entries
+        {
+            get
+            {
+                EnsureCollapseMode();
+                return builtCollapsed ? collapsedEntries : allEntries;
+            }
+        }
 
-		LogEntry newEntry = new()
-		{
-			Message = message,
-			StackTrace = stackTrace,
-			Type = type,
-			RealtimeSinceStartup = Time.realtimeSinceStartup,
-			Count = 1,
-			ContextGameObjectInstanceId = contextGameObjectId
-		};
+        private int[] CurrentCounts
+        {
+            get
+            {
+                EnsureCollapseMode();
+                return builtCollapsed ? collapsedCounts : allCounts;
+            }
+        }
 
-            originalLogEntries.Add(new LogEntry
+        public void AddLog(string message, string stackTrace, LogType type, int contextGameObjectInstanceId)
+        {
+            EnsureCollapseMode();
+
+            LogEntry entry = new()
             {
                 Message = message,
                 StackTrace = stackTrace,
                 Type = type,
-                RealtimeSinceStartup = Time.realtimeSinceStartup,
+                RealtimeSinceStartup = Clock(),
                 Count = 1,
-                ContextGameObjectInstanceId = contextGameObjectId
-            });
+                ContextGameObjectInstanceId = contextGameObjectInstanceId
+            };
 
-            PruneOriginalIfExceedsLimit();
+            allEntries.Add(entry);
+            allCounts[LevelIndex(type)]++;
 
-            if (filterManager.IsCollapseEnabled)
-            {
-                LogEntry existing = FindExistingEntry(newEntry);
-                if (existing != null)
-                {
-                    existing.Count++;
-                    return;
-                }
-            }
+            if (builtCollapsed)
+                AddToCollapsed(entry);
 
-            logEntries.Add(newEntry);
-            PruneVisibleIfExceedsLimit();
+            if (allEntries.Count > MAX_LOG_ENTRIES)
+                PruneOldest(PRUNE_CHUNK);
         }
 
         public void Clear()
         {
-            logEntries.Clear();
-            originalLogEntries.Clear();
+            allEntries.Clear();
+            collapsedEntries.Clear();
+            collapseGroups.Clear();
+            Array.Clear(allCounts, 0, allCounts.Length);
+            Array.Clear(collapsedCounts, 0, collapsedCounts.Length);
+            structureVersion++;
         }
 
         public List<LogEntry> GetPersistableEntries()
         {
-            return new List<LogEntry>(originalLogEntries);
+            return new List<LogEntry>(allEntries);
         }
 
         public void Restore(List<LogEntry> entries)
@@ -83,99 +116,128 @@ namespace EnhancedConsole.Editor.LogManagement
                 return;
 
             Clear();
-            originalLogEntries.AddRange(entries);
+
+            int start = Math.Max(0, entries.Count - MAX_LOG_ENTRIES);
+            for (int i = start; i < entries.Count; i++)
+            {
+                LogEntry entry = entries[i];
+                if (entry == null)
+                    continue;
+
+                entry.Count = 1;
+                allEntries.Add(entry);
+                allCounts[LevelIndex(entry.Type)]++;
+            }
+
             RebuildWithCollapse();
         }
 
         public void RebuildWithCollapse()
         {
-            if (originalLogEntries.Count == 0)
-                return;
+            builtCollapsed = filterManager.IsCollapseEnabled;
+            builtExactStacktrace = filterManager.IsCollapseExactStacktraceEnabled;
 
-            List<LogEntry> rebuiltEntries = new();
+            collapsedEntries.Clear();
+            collapseGroups.Clear();
+            Array.Clear(collapsedCounts, 0, collapsedCounts.Length);
 
-            if (filterManager.IsCollapseEnabled)
+            if (builtCollapsed)
             {
-                foreach (LogEntry entry in originalLogEntries)
-                {
-                    LogEntry existing = FindExistingInList(rebuiltEntries, entry);
-                    if (existing != null)
-                        existing.Count++;
-                    else
-                        rebuiltEntries.Add(CloneEntry(entry));
-                }
-            }
-            else
-            {
-                rebuiltEntries = new List<LogEntry>(originalLogEntries);
+                for (int i = 0; i < allEntries.Count; i++)
+                    AddToCollapsed(allEntries[i]);
             }
 
-            logEntries.Clear();
-            logEntries.AddRange(rebuiltEntries);
+            structureVersion++;
         }
 
-        public List<LogEntry> GetEntries()
-        {
-            return new List<LogEntry>(logEntries);
-        }
-
+        /// <summary>
+        /// Returns the filtered view. The list is cached and owned by this manager: don't modify it.
+        /// New logs are filtered incrementally; the view is rebuilt only when entries are removed,
+        /// regrouped, or a filter changes.
+        /// </summary>
         public List<LogEntry> GetFilteredEntries()
         {
-            return filterManager.FilterLogs(logEntries);
-        }
+            IReadOnlyList<LogEntry> source = Entries;
+            int filterVersion = filterManager.Version;
 
-        private void PruneOriginalIfExceedsLimit()
-        {
-            if (originalLogEntries.Count <= MAX_LOG_ENTRIES)
-                return;
-
-            LogEntry oldest = originalLogEntries[0];
-            originalLogEntries.RemoveAt(0);
-
-            if (!filterManager.IsCollapseEnabled)
-                return;
-
-            LogEntry group = FindExistingInList(logEntries, oldest);
-            if (group != null && --group.Count <= 0)
-                logEntries.Remove(group);
-        }
-
-        private void PruneVisibleIfExceedsLimit()
-        {
-            if (logEntries.Count <= MAX_LOG_ENTRIES)
-                return;
-
-            logEntries.RemoveAt(0);
-        }
-
-        private LogEntry FindExistingEntry(LogEntry newEntry)
-        {
-            if (filterManager.IsCollapseExactStacktraceEnabled)
+            if (filterVersion != filteredFilterVersion || structureVersion != filteredStructureVersion)
             {
-                return logEntries.Find(e =>
-                    e.Message == newEntry.Message &&
-                    e.Type == newEntry.Type &&
-                    e.StackTrace == newEntry.StackTrace);
+                filteredEntries.Clear();
+                filteredSourceCount = 0;
+                filteredFilterVersion = filterVersion;
+                filteredStructureVersion = structureVersion;
+                FilteredResetCount++;
             }
 
-            return logEntries.Find(e =>
-                e.Message == newEntry.Message &&
-                e.Type == newEntry.Type);
-        }
-
-        private LogEntry FindExistingInList(List<LogEntry> list, LogEntry entry)
-        {
-            if (filterManager.IsCollapseExactStacktraceEnabled)
+            for (int i = filteredSourceCount; i < source.Count; i++)
             {
-                return list.Find(e =>
-                    e.Message == entry.Message &&
-                    e.Type == entry.Type &&
-                    e.StackTrace == entry.StackTrace);
+                LogEntry entry = source[i];
+                if (filterManager.Matches(entry))
+                    filteredEntries.Add(entry);
             }
 
-            return list.Find(e =>
-                e.Message == entry.Message &&
-                e.Type == entry.Type);
+            filteredSourceCount = source.Count;
+            return filteredEntries;
+        }
+
+        private void EnsureCollapseMode()
+        {
+            if (builtCollapsed != filterManager.IsCollapseEnabled ||
+                (builtCollapsed && builtExactStacktrace != filterManager.IsCollapseExactStacktraceEnabled))
+                RebuildWithCollapse();
+        }
+
+        private void AddToCollapsed(LogEntry entry)
+        {
+            CollapseKey key = new(entry, builtExactStacktrace);
+            if (collapseGroups.TryGetValue(key, out LogEntry group))
+            {
+                group.Count++;
+                return;
+            }
+
+            group = CloneEntry(entry);
+            collapseGroups.Add(key, group);
+            collapsedEntries.Add(group);
+            collapsedCounts[LevelIndex(entry.Type)]++;
+        }
+
+        private void PruneOldest(int count)
+        {
+            count = Math.Min(count, allEntries.Count);
+
+            for (int i = 0; i < count; i++)
+            {
+                LogEntry oldest = allEntries[i];
+                allCounts[LevelIndex(oldest.Type)]--;
+
+                if (!builtCollapsed)
+                    continue;
+
+                CollapseKey key = new(oldest, builtExactStacktrace);
+                if (collapseGroups.TryGetValue(key, out LogEntry group) && --group.Count <= 0)
+                {
+                    collapseGroups.Remove(key);
+                    collapsedCounts[LevelIndex(group.Type)]--;
+                }
+            }
+
+            allEntries.RemoveRange(0, count);
+
+            if (builtCollapsed)
+                collapsedEntries.RemoveAll(group => group.Count <= 0);
+
+            structureVersion++;
+        }
+
+        private static int LevelIndex(LogType type)
+        {
+            return type switch
+            {
+                LogType.Log => 0,
+                LogType.Warning => 1,
+                _ => 2
+            };
         }
 
         private static LogEntry CloneEntry(LogEntry entry)
@@ -191,67 +253,39 @@ namespace EnhancedConsole.Editor.LogManagement
             };
         }
 
-	private static int TryExtractGameObjectContextId(string message, string stackTrace)
-	{
-		// First, try to get context from LogContextHelper (captures Unity's Debug.Log context parameter)
-		int contextId = LogContextHelper.GetLastLogContextInstanceId();
-		if (contextId != 0)
-		{
-			// Clear the context after use
-			LogContextHelper.ClearLogContext();
-			return contextId;
-		}
-
-        // Try to extract GameObject reference from message if it's logged with context
-        // Unity format: "Message (UnityEngine.GameObject)"
-        if (string.IsNullOrEmpty(message))
-            return 0;
-
-        // Check if message ends with a context identifier (e.g., "(GameObjectName (UnityEngine.GameObject))")
-        int openParenIndex = message.LastIndexOf('(');
-        if (openParenIndex > 0)
+        private readonly struct CollapseKey : IEquatable<CollapseKey>
         {
-            string possibleContext = message.Substring(openParenIndex);
+            private readonly string message;
+            private readonly string stackTrace;
+            private readonly LogType type;
 
-            // Check if this looks like a Unity object context
-            if (possibleContext.Contains("GameObject") || possibleContext.Contains("Component") || possibleContext.Contains("MonoBehaviour"))
+            public CollapseKey(LogEntry entry, bool includeStackTrace)
             {
-                // Try to find the GameObject instance from the stack trace
-                // This is a best-effort approach
-                contextId = TryFindGameObjectInstanceFromStackTrace(stackTrace);
+                message = entry.Message ?? "";
+                stackTrace = includeStackTrace ? entry.StackTrace ?? "" : null;
+                type = entry.Type;
             }
-        }
 
-        return contextId;
-    }
-
-    private static int TryFindGameObjectInstanceFromStackTrace(string stackTrace)
-        {
-            if (string.IsNullOrEmpty(stackTrace))
-                return 0;
-
-            try
+            public bool Equals(CollapseKey other)
             {
-                // Try to extract context from Unity object reference in message
-                // When Debug.Log is called with an object context, we can use that
-                string[] lines = stackTrace.Split('\n');
-                foreach (string line in lines)
+                return type == other.type &&
+                       string.Equals(message, other.message, StringComparison.Ordinal) &&
+                       string.Equals(stackTrace, other.stackTrace, StringComparison.Ordinal);
+            }
+
+            public override bool Equals(object obj) => obj is CollapseKey other && Equals(other);
+
+            public override int GetHashCode()
+            {
+                unchecked
                 {
-                    // Look for MonoBehaviour method calls in stack trace
-                    if (line.Contains("at ") && (line.Contains(".cs:") || line.Contains(".cs(") || line.Contains(".cs)")))
-                    {
-                        // This line has file info, but we can't reliably extract GameObject without reflection
-                        // Return the first found frame's context (would need more sophisticated parsing)
-                        break;
-                    }
+                    int hash = message.GetHashCode();
+                    hash = (hash * 397) ^ (int)type;
+                    if (stackTrace != null)
+                        hash = (hash * 397) ^ stackTrace.GetHashCode();
+                    return hash;
                 }
             }
-            catch
-            {
-                // Silently ignore any parsing errors
-            }
-
-            return 0;
         }
     }
 }

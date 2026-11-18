@@ -1,6 +1,4 @@
 #if UNITY_EDITOR
-using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 namespace EnhancedConsole.Editor
@@ -26,9 +24,10 @@ namespace EnhancedConsole.Editor
 		private bool showErrors = true;
 		private bool collapseEnabled = false;
 		private bool collapseExactStacktrace = false;
+		private int version = 1;
 
-		private ConsoleSearchEngine searchEngine;
-		private SectionedLogOrganizer sectionOrganizer;
+		private readonly ConsoleSearchEngine searchEngine;
+		private readonly SectionedLogOrganizer sectionOrganizer;
 
 		public LogFilterManager()
 		{
@@ -36,50 +35,41 @@ namespace EnhancedConsole.Editor
 			sectionOrganizer = new();
 		}
 
+		/// <summary>
+		/// Changes whenever a filter that decides which entries are visible changes.
+		/// Both parts only ever increase, so their sum changes on every update.
+		/// </summary>
+		public int Version => version + sectionOrganizer.Version;
+
 		// Log Type Filter Implementation
 		public bool MatchesLogType(LogEntry log)
 		{
 			return (log.Type == LogType.Log && showInfo) ||
 				   (log.Type == LogType.Warning && showWarnings) ||
-				   (log.Type is LogType.Error or LogType.Exception or LogType.Assert && showErrors);
+				   (log.IsError && showErrors);
 		}
 
 		// Log Type Configuration
 		public void SetShowInfo(bool show)
 		{
-			showInfo = show;
+			SetFlag(ref showInfo, show);
 		}
 
 		public void SetShowWarnings(bool show)
 		{
-			showWarnings = show;
+			SetFlag(ref showWarnings, show);
 		}
 
 		public void SetShowErrors(bool show)
 		{
-			showErrors = show;
+			SetFlag(ref showErrors, show);
 		}
 
 		public bool IsShowingInfo => showInfo;
 		public bool IsShowingWarnings => showWarnings;
 		public bool IsShowingErrors => showErrors;
 
-		public int GetInfoCount(List<LogEntry> logs)
-		{
-			return logs.Count(e => e.Type == LogType.Log);
-		}
-
-		public int GetWarningCount(List<LogEntry> logs)
-		{
-			return logs.Count(e => e.Type == LogType.Warning);
-		}
-
-		public int GetErrorCount(List<LogEntry> logs)
-		{
-			return logs.Count(e => e.Type == LogType.Error || e.Type == LogType.Exception || e.Type == LogType.Assert);
-		}
-
-		// Collapse Configuration
+		// Collapse Configuration. LogEntryManager regroups entries when these change.
 		public void SetCollapse(bool enabled)
 		{
 			collapseEnabled = enabled;
@@ -94,15 +84,15 @@ namespace EnhancedConsole.Editor
 
 		public bool IsCollapseExactStacktraceEnabled => collapseExactStacktrace;
 
-		// Search Engine Access
-		public ConsoleSearchEngine GetSearchEngine()
-		{
-			return searchEngine;
-		}
-
+		// Search
 		public void SetSearchFilter(string filter)
 		{
+			filter ??= "";
+			if (filter == searchEngine.GetSearchFilter())
+				return;
+
 			searchEngine.SetSearchFilter(filter);
+			version++;
 		}
 
 		public string GetSearchFilter()
@@ -122,20 +112,11 @@ namespace EnhancedConsole.Editor
 		}
 
 		// Combined Filtering
-		public List<LogEntry> FilterLogs(List<LogEntry> logs)
+		public bool Matches(LogEntry log)
 		{
-			return logs
-				.Where(log =>
-					MatchesLogType(log) &&
-					searchEngine.MatchesSearchFilter(log) &&
-					sectionOrganizer.MatchesSectionFilter(log))
-				.ToList();
-		}
-
-		// Analytics
-		public int GetTotalLogCount(List<LogEntry> logs)
-		{
-			return logs.Count;
+			return MatchesLogType(log) &&
+				   searchEngine.MatchesSearchFilter(log) &&
+				   sectionOrganizer.MatchesSectionFilter(log);
 		}
 
 		public bool HasActiveFilters()
@@ -144,7 +125,15 @@ namespace EnhancedConsole.Editor
 				   !string.IsNullOrEmpty(searchEngine.GetSearchFilter()) ||
 				   sectionOrganizer.IsFilterActive;
 		}
+
+		private void SetFlag(ref bool field, bool value)
+		{
+			if (field == value)
+				return;
+
+			field = value;
+			version++;
+		}
 	}
 }
 #endif
-

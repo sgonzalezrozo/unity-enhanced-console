@@ -4,6 +4,31 @@ All notable changes to this package are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Faster with many logs. The filtered list is cached and only new logs are filtered, instead of copying and filtering every log several times per repaint. Collapse uses a lookup table instead of a linear search, so turning it on with 10,000 logs no longer freezes the Editor.
+- Section matching no longer allocates for every log on every repaint. Regexes are parsed once, and each log remembers which section it matched.
+- An invalid section regex is detected once, instead of throwing an exception for every log on every repaint.
+- The window repaints at most 30 times per second while logs arrive, instead of once per log plus a queued repaint, and no longer repaints every 0.1 seconds in Play Mode when nothing changed.
+- The stack trace panel parses the selected stack trace once and draws only the visible lines.
+- Clicking a log finds its context object directly, instead of searching every loaded scene. Logs whose context is an asset, such as a ScriptableObject, now ping that asset.
+- When logs are pruned at 10,000, the oldest 1,000 are removed at once.
+- Resizing the stack trace panel saves its height when you release the mouse, not on every drag event.
+
+### Fixed
+
+- A section with an empty name matched every log.
+- The selection jumped to a different log when a filter changed, Collapse was toggled or old logs were pruned. The selected log is found again instead, and multi-selection is cleared.
+- `Debug.Log(message, component)` from a background thread threw an exception, because the context handler read `component.gameObject` off the main thread.
+- A context logged on a background thread could attach to the next main-thread log.
+- Errors in the window's GUI were drawn as a help box that broke the layout and repeated on every repaint. They're now logged once.
+- The **Time** toggle saved preferences whenever any control changed, such as while typing a search.
+- The section config inspector didn't refresh its serialized data before drawing, and removing with nothing selected raised an error.
+
+### Removed
+
+- `ConsoleViewRenderer`, which was unused and created three textures each time the window was enabled without destroying them.
+
 ## [0.3.1] - 2026-11-17
 
 ### Added

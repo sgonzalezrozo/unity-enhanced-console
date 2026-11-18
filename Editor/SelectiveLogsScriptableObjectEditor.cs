@@ -23,6 +23,7 @@ namespace EnhancedConsole.Editor
             if (config == null)
                 return;
 
+            serializedObject.Update();
             config.InitializeDefaultSections();
 
             SerializedProperty systemDefinedProp = serializedObject.FindProperty("systemDefinedSections");
@@ -41,7 +42,11 @@ namespace EnhancedConsole.Editor
                 drawHeaderCallback = rect => EditorGUI.LabelField(rect, "User Defined Sections", EditorStyles.boldLabel),
                 drawElementCallback = (rect, index, _, __) =>
                     DrawSectionElement(rect, userDefinedProp.GetArrayElementAtIndex(index)),
-                onRemoveCallback = list => userDefinedProp.DeleteArrayElementAtIndex(list.index),
+                onRemoveCallback = list =>
+                {
+                    if (list.index >= 0 && list.index < userDefinedProp.arraySize)
+                        userDefinedProp.DeleteArrayElementAtIndex(list.index);
+                },
                 elementHeightCallback = index => GetElementHeight(userDefinedProp.GetArrayElementAtIndex(index))
             };
 
@@ -58,14 +63,7 @@ namespace EnhancedConsole.Editor
                 return;
 
             EditorUtility.SetDirty(config);
-            try
-            {
-                RepaintEnhancedConsoleWindow();
-            }
-            catch (System.Exception)
-            {
-                // ignored
-            }
+            EnhancedConsoleWindow.RepaintIfOpen();
         }
 
         private void DrawSectionElement(Rect rect, SerializedProperty property)
@@ -113,19 +111,6 @@ namespace EnhancedConsole.Editor
                 return (lineHeight + lineSpacing) * 2 + 4;
 
             return lineHeight + lineSpacing;
-        }
-
-        private void RepaintEnhancedConsoleWindow()
-        {
-            EditorWindow[] windows = Resources.FindObjectsOfTypeAll<EditorWindow>();
-            foreach (EditorWindow window in windows)
-            {
-                if (window.GetType().Name != "EnhancedConsoleWindow")
-                    continue;
-
-                window.Repaint();
-                return;
-            }
         }
 
 

@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System.Text;
+using UnityEditor;
 using UnityEngine;
 
 namespace EnhancedConsole.Editor
@@ -10,6 +11,13 @@ namespace EnhancedConsole.Editor
 	/// </summary>
 	internal class LogEntryFormatter
 	{
+		private const int MAX_DISPLAY_LENGTH = 200;
+		private static readonly char[] NewlineChars = { '\r', '\n' };
+
+		private static Texture2D errorIcon;
+		private static Texture2D warningIcon;
+		private static Texture2D infoIcon;
+
 		private bool showStackTrace;
 		private bool showCollapsedCount;
 
@@ -33,8 +41,10 @@ namespace EnhancedConsole.Editor
 		{
 			StringBuilder builder = new();
 
-			string prefix = showCollapsedCount && log.Count > 1 ? $"({log.Count}x) " : "";
-			builder.Append($"{prefix}[{log.Type}] {log.Message}");
+			if (showCollapsedCount && log.Count > 1)
+				builder.Append('(').Append(log.Count).Append("x) ");
+
+			builder.Append('[').Append(log.Type).Append("] ").Append(log.Message);
 
 			if (showStackTrace && !string.IsNullOrEmpty(log.StackTrace))
 			{
@@ -45,23 +55,7 @@ namespace EnhancedConsole.Editor
 			return builder.ToString();
 		}
 
-		public string FormatSingleEntry(LogEntry log)
-		{
-			StringBuilder builder = new();
-
-			builder.AppendLine($"[{log.Type}] {log.Message}");
-
-			if (showStackTrace && !string.IsNullOrEmpty(log.StackTrace))
-			{
-				builder.AppendLine();
-				builder.AppendLine("Stack Trace:");
-				builder.AppendLine(log.StackTrace);
-			}
-
-			return builder.ToString();
-		}
-
-		public string FormatTimeDisplay(float realtimeSinceStartup)
+		public static string FormatTimeDisplay(float realtimeSinceStartup)
 		{
 			int minutes = (int)(realtimeSinceStartup / 60f);
 			int seconds = (int)(realtimeSinceStartup % 60f);
@@ -69,37 +63,45 @@ namespace EnhancedConsole.Editor
 			return $"{minutes:00}:{seconds:00}.{milliseconds:000}";
 		}
 
-		public string TruncateMessage(string message, int maxLength = 200)
+		public static string TruncateMessage(string message)
 		{
 			if (string.IsNullOrEmpty(message))
 				return "";
 
 			string displayText = message;
-			int newlineIndex = displayText.IndexOfAny(new[] { '\r', '\n' });
+			int newlineIndex = displayText.IndexOfAny(NewlineChars);
 			if (newlineIndex >= 0)
 				displayText = displayText.Substring(0, newlineIndex);
 
-			if (displayText.Length > maxLength)
-				displayText = displayText.Substring(0, maxLength) + "...";
+			if (displayText.Length > MAX_DISPLAY_LENGTH)
+				displayText = displayText.Substring(0, MAX_DISPLAY_LENGTH) + "...";
 
 			return displayText;
 		}
 
-		public Texture2D GetIconForLogType(LogType type)
+		public static Texture2D GetIconForLogType(LogType type)
 		{
 			switch (type)
 			{
 				case LogType.Error:
 				case LogType.Exception:
 				case LogType.Assert:
-					return UnityEditor.EditorGUIUtility.IconContent("console.erroricon").image as Texture2D;
+					return GetIcon(ref errorIcon, "console.erroricon");
 				case LogType.Warning:
-					return UnityEditor.EditorGUIUtility.IconContent("console.warnicon").image as Texture2D;
+					return GetIcon(ref warningIcon, "console.warnicon");
 				default:
-					return UnityEditor.EditorGUIUtility.IconContent("console.infoicon").image as Texture2D;
+					return GetIcon(ref infoIcon, "console.infoicon");
 			}
+		}
+
+		// Uses Unity's null check, so an icon unloaded by a skin change is loaded again.
+		private static Texture2D GetIcon(ref Texture2D cached, string name)
+		{
+			if (cached == null)
+				cached = EditorGUIUtility.IconContent(name).image as Texture2D;
+
+			return cached;
 		}
 	}
 }
 #endif
-

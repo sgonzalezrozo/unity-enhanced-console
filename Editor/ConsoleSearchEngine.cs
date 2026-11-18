@@ -1,7 +1,5 @@
 #if UNITY_EDITOR
 using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace EnhancedConsole.Editor
 {
@@ -23,11 +21,6 @@ namespace EnhancedConsole.Editor
 			return searchFilter;
 		}
 
-		public void ClearSearchFilter()
-		{
-			searchFilter = "";
-		}
-
 		public bool MatchesSearchFilter(LogEntry log)
 		{
 			if (string.IsNullOrEmpty(searchFilter))
@@ -37,14 +30,7 @@ namespace EnhancedConsole.Editor
 				   SearchInText(log.StackTrace, searchFilter);
 		}
 
-		public List<LogEntry> FilterLogs(List<LogEntry> logs, Func<LogEntry, bool> additionalFilter)
-		{
-			return logs
-				.Where(log => MatchesSearchFilter(log) && additionalFilter(log))
-				.ToList();
-		}
-
-		private bool SearchInText(string text, string searchTerm)
+		private static bool SearchInText(string text, string searchTerm)
 		{
 			if (string.IsNullOrEmpty(text))
 				return false;
@@ -54,4 +40,3 @@ namespace EnhancedConsole.Editor
 	}
 }
 #endif
-

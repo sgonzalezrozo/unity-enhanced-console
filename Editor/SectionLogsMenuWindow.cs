@@ -62,16 +62,14 @@ namespace EnhancedConsole.Editor
 
                 if (GUILayout.Button("Enable All", EditorStyles.miniButtonLeft, GUILayout.Height(20)))
                 {
-                    foreach (SelectiveLogSection section in sections)
-                        sectionStates[section.name] = true;
+                    SetAll(true);
 
                     onChanged?.Invoke();
                 }
 
                 if (GUILayout.Button("Disable All", EditorStyles.miniButtonRight, GUILayout.Height(20)))
                 {
-                    foreach (SelectiveLogSection section in sections)
-                        sectionStates[section.name] = false;
+                    SetAll(false);
 
                     onChanged?.Invoke();
                 }
@@ -84,7 +82,8 @@ namespace EnhancedConsole.Editor
 
                 foreach (SelectiveLogSection section in sections)
                 {
-                    bool isEnabled = sectionStates[section.name];
+                    if (section == null || section.name == null || !sectionStates.TryGetValue(section.name, out bool isEnabled))
+                        continue;
 
                     Rect lineRect = EditorGUILayout.GetControlRect(false, ITEM_HEIGHT);
                     lineRect.x += 4;
@@ -107,6 +106,10 @@ namespace EnhancedConsole.Editor
                 GUILayout.Space(4);
                 GUILayout.EndVertical();
             }
+            catch (ExitGUIException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 Debug.LogError($"[SectionLogsMenuWindow] Error in OnGUI: {ex.Message}");
@@ -121,6 +124,15 @@ namespace EnhancedConsole.Editor
                 case EventType.KeyDown when currentEvent.keyCode == KeyCode.Escape:
                     Close();
                     break;
+            }
+        }
+
+        private void SetAll(bool enabled)
+        {
+            foreach (SelectiveLogSection section in sections)
+            {
+                if (section != null && section.name != null)
+                    sectionStates[section.name] = enabled;
             }
         }
 

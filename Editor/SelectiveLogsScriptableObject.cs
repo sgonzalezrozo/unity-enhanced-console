@@ -87,60 +87,6 @@ namespace EnhancedConsole.Editor
             allSections.AddRange(userDefinedSections);
             return allSections.ToArray();
         }
-
-        internal SelectiveLogSection GetFirstMatchingSection(LogEntry log, SLFilterMode filterMode)
-        {
-            if (log == null)
-                return null;
-
-            SelectiveLogSection[] allSections = GetAllSections();
-
-            foreach (SelectiveLogSection section in allSections)
-            {
-                if (SectionMatches(section, log, filterMode))
-                    return section;
-            }
-
-            return null;
-        }
-
-        internal System.Collections.Generic.List<SelectiveLogSection> GetAllMatchingSections(LogEntry log, SLFilterMode filterMode)
-        {
-            System.Collections.Generic.List<SelectiveLogSection> matches = new();
-
-            if (log == null)
-                return matches;
-
-            SelectiveLogSection[] allSections = GetAllSections();
-
-            foreach (SelectiveLogSection section in allSections)
-            {
-                if (SectionMatches(section, log, filterMode))
-                    matches.Add(section);
-            }
-
-            return matches;
-        }
-
-        private static bool SectionMatches(SelectiveLogSection section, LogEntry log, SLFilterMode filterMode)
-        {
-            bool foundInStack = false;
-            bool foundInContent = false;
-
-            if (!string.IsNullOrEmpty(log.StackTrace))
-                foundInStack = section.Matches(log.StackTrace);
-
-            if (!string.IsNullOrEmpty(log.Message))
-                foundInContent = section.Matches(log.Message);
-
-            return filterMode switch
-            {
-                SLFilterMode.StackAndContent => foundInStack || foundInContent,
-                SLFilterMode.OnlyStack => foundInStack,
-                SLFilterMode.OnlyContent => foundInContent,
-                _ => foundInStack || foundInContent
-            };
-        }
     }
 
     [System.Serializable]
@@ -163,26 +109,109 @@ namespace EnhancedConsole.Editor
 
         public bool Matches(string text)
         {
+            SectionTextMatcher.Build(this, out System.Text.RegularExpressions.Regex regex, out string plainNeedle, out bool plainIgnoresSpaces);
+            return SectionTextMatcher.Matches(text, regex, plainNeedle, plainIgnoresSpaces);
+        }
+    }
+
+    /// <summary>
+    /// Section text matching without per-call allocations or exceptions.
+    /// Plain names match case-insensitively and ignore spaces. Regexes are parsed once by the caller.
+    /// </summary>
+    internal static class SectionTextMatcher
+    {
+        private const System.Text.RegularExpressions.RegexOptions RegexFlags =
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant;
+
+        public static void Build(SelectiveLogSection section, out System.Text.RegularExpressions.Regex regex, out string plainNeedle, out bool plainIgnoresSpaces)
+        {
+            regex = null;
+            string name = section.name ?? "";
+
+            if (section.useRegex)
+            {
+                string pattern = string.IsNullOrEmpty(section.pattern) ? name : section.pattern;
+                if (pattern.Length > 0)
+                {
+                    try
+                    {
+                        regex = new System.Text.RegularExpressions.Regex(pattern, RegexFlags);
+                    }
+                    catch (System.ArgumentException)
+                    {
+                        // Invalid regex: fall back to the section name as plain text, checked once here
+                        // instead of throwing for every log on every repaint.
+                    }
+                }
+
+                if (regex != null)
+                {
+                    plainNeedle = null;
+                    plainIgnoresSpaces = false;
+                    return;
+                }
+
+                plainNeedle = name.ToUpperInvariant();
+                plainIgnoresSpaces = false;
+                return;
+            }
+
+            plainNeedle = name.Replace(" ", "").ToUpperInvariant();
+            plainIgnoresSpaces = true;
+        }
+
+        public static bool Matches(string text, System.Text.RegularExpressions.Regex regex, string plainNeedle, bool plainIgnoresSpaces)
+        {
             if (string.IsNullOrEmpty(text))
                 return false;
 
-            string searchPattern = useRegex && !string.IsNullOrEmpty(pattern) ? pattern : name;
+            if (regex != null)
+                return regex.IsMatch(text);
 
-            if (useRegex)
+            // An empty name matches nothing. Before, it matched every log.
+            if (string.IsNullOrEmpty(plainNeedle))
+                return false;
+
+            return plainIgnoresSpaces
+                ? ContainsIgnoringSpaces(text, plainNeedle)
+                : text.IndexOf(plainNeedle, System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// Case-insensitive search for an upper-case, space-free needle, skipping spaces in the text.
+        /// Equivalent to comparing both strings with spaces removed, without allocating.
+        /// </summary>
+        private static bool ContainsIgnoringSpaces(string text, string upperNeedle)
+        {
+            char first = upperNeedle[0];
+            for (int i = 0; i < text.Length; i++)
             {
-                try
+                if (char.ToUpperInvariant(text[i]) != first)
+                    continue;
+
+                int t = i + 1;
+                int n = 1;
+                while (n < upperNeedle.Length && t < text.Length)
                 {
-                    return System.Text.RegularExpressions.Regex.IsMatch(text, searchPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    char c = text[t];
+                    if (c == ' ')
+                    {
+                        t++;
+                        continue;
+                    }
+
+                    if (char.ToUpperInvariant(c) != upperNeedle[n])
+                        break;
+
+                    t++;
+                    n++;
                 }
-                catch
-                {
-                    return text.IndexOf(name, System.StringComparison.OrdinalIgnoreCase) >= 0;
-                }
+
+                if (n == upperNeedle.Length)
+                    return true;
             }
 
-            string textNoSpaces = text.Replace(" ", "");
-            string patternNoSpaces = searchPattern.Replace(" ", "");
-            return textNoSpaces.IndexOf(patternNoSpaces, System.StringComparison.OrdinalIgnoreCase) >= 0;
+            return false;
         }
     }
 }
