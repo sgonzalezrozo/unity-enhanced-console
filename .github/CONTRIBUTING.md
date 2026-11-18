@@ -21,9 +21,9 @@ Thanks for helping out. Bug reports, documentation fixes and pull requests are w
   - Methods of 15 lines at most, classes of 200 lines at most, and 3 parameters at most.
   - No LINQ or lambdas, and `for` loops over lists.
   - A short `///` summary on each class, and no `///` on members. Other comments only for what the code can't say.
-- Put new code in the folder for its area. The README's [Architecture](../README.md#architecture) section lists them.
+- Put new code in the folder for its area. The [Architecture](../Documentation~/core-concepts.md#architecture) section in How It Works lists them.
 - Don't leave internal notes in comments, such as planning phases or old file locations.
-- Update `README.md` when behavior changes.
+- Update the matching guide in `Documentation~/` when behavior changes, and `README.md` if the change affects installation, the quickstart or the feature list.
 - Add an entry to `CHANGELOG.md`, and mark breaking changes with **Breaking**.
 - Unity needs a `.meta` file for every new file and folder in the package, so commit those too. Folders ending in `~` and folders starting with `.` don't need them.
 
@@ -46,7 +46,7 @@ In your pull request, list the Unity version, scripting backend and platform you
 ## Release checklist
 
 1. Update `version` in `package.json`.
-2. Update the version in the README badge, pin example and Project status section.
+2. Update the version in the README badge and in `Documentation~/project-status.md`.
 3. Move the changelog entries under the new version.
 4. Check that `llms.txt` still describes the features.
 5. Create the matching tag, such as `v0.3.0`, and push it.

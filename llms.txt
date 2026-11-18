@@ -4,7 +4,16 @@
 
 ## Docs
 
-- [README](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/README.md): installation, quick start, API, troubleshooting, FAQ
+- [README](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/README.md): overview, installation, quickstart, links to every guide
+- [Getting Started](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/Documentation~/getting-started.md): requirements, installation, quick start
+- [Features](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/Documentation~/features.md): capture, find, read, act, performance
+- [Section Filtering](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/Documentation~/section-filtering.md): setup, matching, filter modes, recipes
+- [Toolbar & Shortcuts](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/Documentation~/toolbar-and-shortcuts.md): toolbar, display options, keyboard and mouse
+- [How It Works](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/Documentation~/core-concepts.md): log capture, architecture
+- [Comparison](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/Documentation~/comparison.md): vs Unity's Console and other tools
+- [Troubleshooting & Support](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/Documentation~/troubleshooting.md): errors, limitations, where to get help
+- [FAQ](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/Documentation~/faq.md)
+- [Project Status](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/Documentation~/project-status.md): status, versioning, contributing, related packages
 - [Changelog](https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/CHANGELOG.md)
 
 ## Optional
