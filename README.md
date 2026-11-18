@@ -5,10 +5,10 @@
 <sub>DESIGNED & BUILT BY</sub><br>
 **✦ [`SANTIAGO GONZÁLEZ ROZO (@sgonzalezrozo)`](https://github.com/sgonzalezrozo) ✦**
 
-> A Unity Editor console for faster log triage in large projects. Hide logs by system with sections, search messages and stack traces, see when each log happened, and copy a range of logs with or without stack traces. Runs beside Unity's Console, adds nothing to player builds, and needs no logging API.
+A Unity Editor console for faster log triage: hide logs by system, search messages and stack traces, see when each log happened and copy log ranges. Editor-only, no logging API needed.
 
 [![Unity](https://img.shields.io/badge/Unity-6000.3%20tested-black?style=for-the-badge&logo=unity)](Documentation~/getting-started.md#requirements)
-[![Version](https://img.shields.io/badge/version-0.3.4-blue?style=for-the-badge)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.5-blue?style=for-the-badge)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
 [**Installation**](#installation) • [**Key Features**](#key-features) • [**Quickstart**](#quickstart) • [**Section Filtering**](Documentation~/section-filtering.md) • [**Toolbar & Shortcuts**](Documentation~/toolbar-and-shortcuts.md) • [**Comparison**](Documentation~/comparison.md)
