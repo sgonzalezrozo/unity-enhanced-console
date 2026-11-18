@@ -1,6 +1,4 @@
 #if UNITY_EDITOR
-using System;
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -15,8 +13,6 @@ namespace EnhancedConsole.Editor.Window.Toolbar
 
         private readonly ConsoleContext context;
         private readonly ToolbarToggle toggle = new(new GUIContent(), ToolbarControls.BUTTON_WIDTH);
-        private readonly Dictionary<string, bool> menuStates = new();
-        private SelectiveLogSection[] menuSections = Array.Empty<SelectiveLogSection>();
         private Rect menuScreenRect;
 
         public SectionFilterButton(ConsoleContext consoleContext)
@@ -106,30 +102,14 @@ namespace EnhancedConsole.Editor.Window.Toolbar
 
         private void ShowSectionMenu()
         {
-            if (context.SectionConfig == null)
-                return;
-
-            menuSections = context.SectionConfig.GetAllSections();
-            menuStates.Clear();
-            foreach (SelectiveLogSection section in menuSections)
-            {
-                if (section != null && section.name != null)
-                    menuStates[section.name] = section.enabled;
-            }
-
-            SectionLogsMenuWindow.Show(menuScreenRect, menuSections, menuStates, ApplyMenuStates);
+            if (context.SectionConfig != null)
+                SectionLogsMenuWindow.Show(menuScreenRect, context.SectionConfig.GetAllSections(), OnSectionsChanged);
         }
 
-        private void ApplyMenuStates()
+        private void OnSectionsChanged()
         {
             if (context.SectionConfig == null)
                 return;
-
-            foreach (SelectiveLogSection section in menuSections)
-            {
-                if (section != null && section.name != null && menuStates.TryGetValue(section.name, out bool enabled))
-                    section.enabled = enabled;
-            }
 
             EditorUtility.SetDirty(context.SectionConfig);
             context.Sections.RefreshSectionStates();

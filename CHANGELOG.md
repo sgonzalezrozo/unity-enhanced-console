@@ -2,6 +2,13 @@
 
 All notable changes to this package are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- The section menu turns sections on and off directly. Before, it tracked them by name, so two sections with the same name changed together.
+- The last long methods are split, in the section menu, the section config inspector, the Setup command and message truncation. Behavior is unchanged.
+
 ## [0.3.2] - 2026-11-18
 
 ### Added

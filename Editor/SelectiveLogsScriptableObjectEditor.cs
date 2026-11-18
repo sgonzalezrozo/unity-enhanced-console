@@ -5,9 +5,22 @@ using UnityEngine;
 
 namespace EnhancedConsole.Editor
 {
+    /// <summary>
+    /// Inspector for the section config: reorderable lists of system and user sections, and a form to add one.
+    /// </summary>
     [CustomEditor(typeof(SelectiveLogsScriptableObject))]
     public class SelectiveLogsScriptableObjectEditor : UnityEditor.Editor
     {
+        private const float CHECKBOX_WIDTH = 20f;
+        private const float COLOR_WIDTH = 50f;
+        private const float NAME_WIDTH = 150f;
+        private const float REGEX_WIDTH = 60f;
+        private const float FIELD_PADDING = 5f;
+        private const float PATTERN_LABEL_WIDTH = 60f;
+        private const float PATTERN_FIELD_LEFT = 65f;
+        private const float REGEX_ROW_EXTRA_HEIGHT = 4f;
+        private const float LIST_SPACING = 5f;
+        private const float FORM_SPACING = 10f;
         private static readonly GUIContent REGEX_LABEL_CONTENT = new("Regex");
 
         private string newSectionName = "";
@@ -28,26 +41,29 @@ namespace EnhancedConsole.Editor
 
             serializedObject.Update();
             config.InitializeDefaultSections();
+            BindLists();
+            systemDefinedList.DoLayoutList();
+            GUILayout.Space(LIST_SPACING);
+            userDefinedList.DoLayoutList();
+            GUILayout.Space(FORM_SPACING);
+            DrawNewSectionForm(config);
+            serializedObject.ApplyModifiedProperties();
+            if (GUI.changed)
+                OnConfigChanged(config);
+        }
 
+        private static void OnConfigChanged(SelectiveLogsScriptableObject config)
+        {
+            EditorUtility.SetDirty(config);
+            EnhancedConsoleWindow.RepaintIfOpen();
+        }
+
+        private void BindLists()
+        {
             systemDefinedProperty = serializedObject.FindProperty("systemDefinedSections");
             userDefinedProperty = serializedObject.FindProperty("userDefinedSections");
             systemDefinedList ??= CreateSystemDefinedList();
             userDefinedList ??= CreateUserDefinedList();
-
-            systemDefinedList.DoLayoutList();
-            GUILayout.Space(5);
-            userDefinedList.DoLayoutList();
-
-            GUILayout.Space(10);
-            DrawAddNewSectionButton(config);
-
-            serializedObject.ApplyModifiedProperties();
-
-            if (!GUI.changed)
-                return;
-
-            EditorUtility.SetDirty(config);
-            EnhancedConsoleWindow.RepaintIfOpen();
         }
 
         private ReorderableList CreateSystemDefinedList()
@@ -109,86 +125,87 @@ namespace EnhancedConsole.Editor
 
         private void DrawSectionElement(Rect rect, SerializedProperty property)
         {
-            SerializedProperty nameProperty = property.FindPropertyRelative("name");
-            SerializedProperty colorProperty = property.FindPropertyRelative("color");
-            SerializedProperty enabledProperty = property.FindPropertyRelative("enabled");
-            SerializedProperty useRegexProperty = property.FindPropertyRelative("useRegex");
-            SerializedProperty patternProperty = property.FindPropertyRelative("pattern");
-
-            float checkboxWidth = 20;
-            float colorWidth = 50;
-            float padding = 5;
             float lineHeight = EditorGUIUtility.singleLineHeight;
-            float lineSpacing = EditorGUIUtility.standardVerticalSpacing;
+            DrawMainRow(new Rect(rect.x, rect.y, rect.width, lineHeight), property);
 
-            Rect enabledRect = new(rect.x, rect.y, checkboxWidth, lineHeight);
-            Rect colorRect = new(rect.x + checkboxWidth + padding, rect.y, colorWidth, lineHeight);
-            Rect nameRect = new(rect.x + checkboxWidth + colorWidth + padding * 2, rect.y, 150, lineHeight);
-            Rect regexRect = new(rect.x + checkboxWidth + colorWidth + 150 + padding * 3, rect.y, 60, lineHeight);
-
-            enabledProperty.boolValue = EditorGUI.Toggle(enabledRect, enabledProperty.boolValue);
-            colorProperty.colorValue = EditorGUI.ColorField(colorRect, colorProperty.colorValue);
-            EditorGUI.PropertyField(nameRect, nameProperty, GUIContent.none);
-            useRegexProperty.boolValue = EditorGUI.Toggle(regexRect, REGEX_LABEL_CONTENT, useRegexProperty.boolValue);
-
+            SerializedProperty useRegexProperty = property.FindPropertyRelative("useRegex");
             if (!useRegexProperty.boolValue)
                 return;
 
-            float patternY = rect.y + lineHeight + lineSpacing;
-            Rect patternLabelRect = new(rect.x, patternY, 60, lineHeight);
-            Rect patternFieldRect = new(rect.x + 65, patternY, rect.width - 65, lineHeight);
+            float patternTop = rect.y + lineHeight + EditorGUIUtility.standardVerticalSpacing;
+            Rect patternRow = new(rect.x, patternTop, rect.width, lineHeight);
+            DrawPatternRow(patternRow, property.FindPropertyRelative("pattern"));
+        }
 
-            EditorGUI.LabelField(patternLabelRect, "Pattern", EditorStyles.label);
-            EditorGUI.PropertyField(patternFieldRect, patternProperty, GUIContent.none);
+        private static void DrawMainRow(Rect row, SerializedProperty property)
+        {
+            SerializedProperty enabledProperty = property.FindPropertyRelative("enabled");
+            SerializedProperty colorProperty = property.FindPropertyRelative("color");
+            SerializedProperty useRegexProperty = property.FindPropertyRelative("useRegex");
+
+            float colorLeft = row.x + CHECKBOX_WIDTH + FIELD_PADDING;
+            float nameLeft = colorLeft + COLOR_WIDTH + FIELD_PADDING;
+            float regexLeft = nameLeft + NAME_WIDTH + FIELD_PADDING;
+            enabledProperty.boolValue = EditorGUI.Toggle(new Rect(row.x, row.y, CHECKBOX_WIDTH, row.height),
+                enabledProperty.boolValue);
+            colorProperty.colorValue = EditorGUI.ColorField(new Rect(colorLeft, row.y, COLOR_WIDTH, row.height),
+                colorProperty.colorValue);
+            EditorGUI.PropertyField(new Rect(nameLeft, row.y, NAME_WIDTH, row.height),
+                property.FindPropertyRelative("name"), GUIContent.none);
+            useRegexProperty.boolValue = EditorGUI.Toggle(new Rect(regexLeft, row.y, REGEX_WIDTH, row.height),
+                REGEX_LABEL_CONTENT, useRegexProperty.boolValue);
+        }
+
+        private static void DrawPatternRow(Rect row, SerializedProperty patternProperty)
+        {
+            Rect labelRect = new(row.x, row.y, PATTERN_LABEL_WIDTH, row.height);
+            EditorGUI.LabelField(labelRect, "Pattern", EditorStyles.label);
+            Rect fieldRect = new(row.x + PATTERN_FIELD_LEFT, row.y, row.width - PATTERN_FIELD_LEFT, row.height);
+            EditorGUI.PropertyField(fieldRect, patternProperty, GUIContent.none);
         }
 
         private float GetElementHeight(SerializedProperty property)
         {
-            SerializedProperty useRegexProperty = property.FindPropertyRelative("useRegex");
-            float lineHeight = EditorGUIUtility.singleLineHeight;
-            float lineSpacing = EditorGUIUtility.standardVerticalSpacing;
-
-            if (useRegexProperty.boolValue)
-                return (lineHeight + lineSpacing) * 2 + 4;
-
-            return lineHeight + lineSpacing;
+            float rowHeight = EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
+            return property.FindPropertyRelative("useRegex").boolValue
+                ? rowHeight * 2 + REGEX_ROW_EXTRA_HEIGHT
+                : rowHeight;
         }
 
-
-        private void DrawAddNewSectionButton(SelectiveLogsScriptableObject config)
+        private void DrawNewSectionForm(SelectiveLogsScriptableObject config)
         {
             GUILayout.Label("Add New Section", EditorStyles.boldLabel);
-
             EditorGUI.indentLevel++;
-
             showNewSectionInput = EditorGUILayout.Foldout(showNewSectionInput, "New Section Input");
-
             if (showNewSectionInput)
-            {
-                newSectionName = EditorGUILayout.TextField("Section Name", newSectionName);
-                newSectionColor = EditorGUILayout.ColorField("Section Color", newSectionColor);
-
-                EditorGUILayout.BeginHorizontal();
-
-                if (GUILayout.Button("Add Section") && !string.IsNullOrEmpty(newSectionName))
-                {
-                    config.AddUserDefinedSection(newSectionName, newSectionColor);
-                    newSectionName = "";
-                    newSectionColor = Color.white;
-                    showNewSectionInput = false;
-                }
-
-                if (GUILayout.Button("Cancel"))
-                {
-                    newSectionName = "";
-                    newSectionColor = Color.white;
-                    showNewSectionInput = false;
-                }
-
-                EditorGUILayout.EndHorizontal();
-            }
+                DrawNewSectionFields(config);
 
             EditorGUI.indentLevel--;
+        }
+
+        private void DrawNewSectionFields(SelectiveLogsScriptableObject config)
+        {
+            newSectionName = EditorGUILayout.TextField("Section Name", newSectionName);
+            newSectionColor = EditorGUILayout.ColorField("Section Color", newSectionColor);
+
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Add Section") && !string.IsNullOrEmpty(newSectionName))
+            {
+                config.AddUserDefinedSection(newSectionName, newSectionColor);
+                ResetNewSectionForm();
+            }
+
+            if (GUILayout.Button("Cancel"))
+                ResetNewSectionForm();
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private void ResetNewSectionForm()
+        {
+            newSectionName = "";
+            newSectionColor = Color.white;
+            showNewSectionInput = false;
         }
     }
 }

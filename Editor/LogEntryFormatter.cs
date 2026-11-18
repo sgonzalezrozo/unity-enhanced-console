@@ -66,45 +66,51 @@ namespace EnhancedConsole.Editor
             return $"{minutes:00}:{seconds:00}.{milliseconds:000}";
         }
 
-        // The first maxLines lines of a message, each cut at 200 characters.
+        // The first maxLines lines of a message, each cut at 200 characters. A \r\n pair is one line break.
         public static string TruncateMessage(string message, int maxLines = 1)
         {
             if (string.IsNullOrEmpty(message))
                 return "";
 
-            maxLines = Math.Max(1, maxLines);
-            StringBuilder builder = null;
-            int start = 0;
+            int firstLineEnd = message.IndexOfAny(NEWLINE_CHARS);
+            if (firstLineEnd < 0)
+                return TruncateLine(message, 0, message.Length);
 
-            for (int line = 0; line < maxLines && start <= message.Length; line++)
+            return maxLines <= 1 ? TruncateLine(message, 0, firstLineEnd) : JoinLines(message, maxLines);
+        }
+
+        private static string JoinLines(string message, int maxLines)
+        {
+            StringBuilder builder = new();
+            int start = 0;
+            for (int line = 0; line < maxLines; line++)
             {
                 int end = message.IndexOfAny(NEWLINE_CHARS, start);
-                bool isLast = end < 0;
-                if (isLast)
-                    end = message.Length;
-
-                string text = message.Substring(start, end - start);
-                if (text.Length > MAX_DISPLAY_LENGTH)
-                    text = text.Substring(0, MAX_DISPLAY_LENGTH) + "...";
-
-                if (line == 0 && (isLast || maxLines == 1))
-                    return text;
-
-                builder ??= new StringBuilder();
                 if (line > 0)
                     builder.Append('\n');
-                builder.Append(text);
-
-                if (isLast)
+                builder.Append(TruncateLine(message, start, end < 0 ? message.Length : end));
+                if (end < 0)
                     break;
 
-                // Treat \r\n as one line break.
-                start = end + 1;
-                if (message[end] == '\r' && start < message.Length && message[start] == '\n')
-                    start++;
+                start = GetNextLineStart(message, end);
             }
 
-            return builder?.ToString() ?? "";
+            return builder.ToString();
+        }
+
+        private static int GetNextLineStart(string message, int lineBreak)
+        {
+            bool isCrLf = message[lineBreak] == '\r' && lineBreak + 1 < message.Length &&
+                          message[lineBreak + 1] == '\n';
+            return isCrLf ? lineBreak + 2 : lineBreak + 1;
+        }
+
+        private static string TruncateLine(string message, int start, int end)
+        {
+            int length = end - start;
+            return length > MAX_DISPLAY_LENGTH
+                ? message.Substring(start, MAX_DISPLAY_LENGTH) + "..."
+                : message.Substring(start, length);
         }
 
         public static Texture2D GetIconForLogType(LogType type)

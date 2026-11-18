@@ -35,30 +35,34 @@ namespace EnhancedConsole.Editor
 
             SelectiveLogsScriptableObject config = FindConfig();
             if (config == null)
-            {
-                config = ScriptableObject.CreateInstance<SelectiveLogsScriptableObject>();
-                config.InitializeDefaultSections();
-                AssetDatabase.CreateAsset(config, CONFIG_PATH);
-            }
+                config = CreateConfigAsset();
             else
-            {
-                string currentPath = AssetDatabase.GetAssetPath(config);
-                if (currentPath != CONFIG_PATH)
-                {
-                    string error = AssetDatabase.MoveAsset(currentPath, CONFIG_PATH);
-                    if (!string.IsNullOrEmpty(error))
-                        Debug.LogWarning($"[EnhancedConsole] Could not move config: {error}");
-                }
-
-                config.InitializeDefaultSections();
-                EditorUtility.SetDirty(config);
-            }
+                UpdateExistingConfig(config);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-
             EditorUtility.FocusProjectWindow();
             Selection.activeObject = config;
+        }
+
+        private static SelectiveLogsScriptableObject CreateConfigAsset()
+        {
+            SelectiveLogsScriptableObject config = CreateInstance<SelectiveLogsScriptableObject>();
+            config.InitializeDefaultSections();
+            AssetDatabase.CreateAsset(config, CONFIG_PATH);
+            return config;
+        }
+
+        // Moves the config to the default path, if it's elsewhere, and adds missing default sections.
+        private static void UpdateExistingConfig(SelectiveLogsScriptableObject config)
+        {
+            string currentPath = AssetDatabase.GetAssetPath(config);
+            string error = currentPath == CONFIG_PATH ? null : AssetDatabase.MoveAsset(currentPath, CONFIG_PATH);
+            if (!string.IsNullOrEmpty(error))
+                Debug.LogWarning($"[EnhancedConsole] Could not move config: {error}");
+
+            config.InitializeDefaultSections();
+            EditorUtility.SetDirty(config);
         }
 
         public void InitializeDefaultSections()

@@ -1,143 +1,59 @@
 #if UNITY_EDITOR
 using System;
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
 namespace EnhancedConsole.Editor
 {
+    /// <summary>
+    /// A popup under the section filter button that turns sections on and off. Edits each section's enabled
+    /// state directly and reports every change; closes on Escape, a click outside or losing focus.
+    /// </summary>
     public class SectionLogsMenuWindow : EditorWindow
     {
+        private const float ITEM_HEIGHT = 20f;
+        private const float COLOR_BOX_SIZE = 12f;
+        private const float COLOR_BOX_GAP = 6f;
+        private const float SPACING = 4f;
+        private const float WINDOW_WIDTH = 200f;
+        private const float MAX_WINDOW_HEIGHT = 400f;
+        private const float FRAME_HEIGHT = 40f;
+        private const int BUTTON_ROWS = 2;
+        private static readonly Color BACKGROUND_COLOR = new(0.2f, 0.2f, 0.2f, 1f);
+
         private static SectionLogsMenuWindow currentInstance;
 
         private SelectiveLogSection[] sections;
-        private Dictionary<string, bool> sectionStates;
         private Action onChanged;
         private Vector2 scrollPosition;
-        private const float ITEM_HEIGHT = 20f;
-        private const float COLOR_BOX_SIZE = 12f;
 
-        public static void Show(Rect buttonRect, SelectiveLogSection[] sectionConfigs, Dictionary<string, bool> states,
-            Action onChangedCallback)
+        public static void Show(Rect buttonRect, SelectiveLogSection[] sectionConfigs, Action onChangedCallback)
         {
             if (currentInstance != null)
-            {
                 currentInstance.Close();
-                currentInstance = null;
-            }
 
-            SectionLogsMenuWindow window = CreateInstance<SectionLogsMenuWindow>();
-            currentInstance = window;
+            currentInstance = CreateInstance<SectionLogsMenuWindow>();
+            currentInstance.sections = sectionConfigs;
+            currentInstance.onChanged = onChangedCallback;
 
-            window.sections = sectionConfigs;
-            window.sectionStates = states;
-            window.onChanged = onChangedCallback;
-
-            float height = (sectionConfigs.Length + 2) * ITEM_HEIGHT + 40;
-            Vector2 size = new(200, Mathf.Min(height, 400));
-
-            Vector2 position = new(buttonRect.x, buttonRect.yMax);
-            window.position = new Rect(position, size);
-
-            window.ShowPopup();
-            window.Focus();
+            float height = (sectionConfigs.Length + BUTTON_ROWS) * ITEM_HEIGHT + FRAME_HEIGHT;
+            Vector2 size = new(WINDOW_WIDTH, Mathf.Min(height, MAX_WINDOW_HEIGHT));
+            currentInstance.position = new Rect(new Vector2(buttonRect.x, buttonRect.yMax), size);
+            currentInstance.ShowPopup();
+            currentInstance.Focus();
         }
 
         private void OnGUI()
         {
-            if (sections == null || sectionStates == null)
+            if (sections == null)
             {
                 Close();
                 return;
             }
 
-            EditorGUI.DrawRect(new Rect(0, 0, position.width, position.height), new Color(0.2f, 0.2f, 0.2f, 1f));
-
-            try
-            {
-                GUILayout.BeginVertical(GUILayout.ExpandHeight(true));
-                GUILayout.Space(4);
-
-                GUILayout.BeginHorizontal();
-                GUILayout.Space(4);
-
-                if (GUILayout.Button("Enable All", EditorStyles.miniButtonLeft, GUILayout.Height(20)))
-                {
-                    SetAll(true);
-
-                    onChanged?.Invoke();
-                }
-
-                if (GUILayout.Button("Disable All", EditorStyles.miniButtonRight, GUILayout.Height(20)))
-                {
-                    SetAll(false);
-
-                    onChanged?.Invoke();
-                }
-                GUILayout.Space(4);
-                GUILayout.EndHorizontal();
-
-                GUILayout.Space(4);
-
-                scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.ExpandHeight(true));
-
-                foreach (SelectiveLogSection section in sections)
-                {
-                    if (section == null || section.name == null ||
-                        !sectionStates.TryGetValue(section.name, out bool isEnabled))
-                        continue;
-
-                    Rect lineRect = EditorGUILayout.GetControlRect(false, ITEM_HEIGHT);
-                    lineRect.x += 4;
-                    lineRect.width -= 8;
-
-                    Rect colorBoxRect = new(lineRect.x, lineRect.y + (ITEM_HEIGHT - COLOR_BOX_SIZE) * 0.5f,
-                        COLOR_BOX_SIZE, COLOR_BOX_SIZE);
-                    EditorGUI.DrawRect(colorBoxRect, section.color);
-
-                    Rect toggleRect = new(lineRect.x + COLOR_BOX_SIZE + 6, lineRect.y,
-                        lineRect.width - COLOR_BOX_SIZE - 6, ITEM_HEIGHT);
-                    bool newState = EditorGUI.Toggle(toggleRect, section.name, isEnabled);
-                    if (newState == isEnabled)
-                        continue;
-
-                    sectionStates[section.name] = newState;
-                    onChanged?.Invoke();
-                }
-
-                GUILayout.EndScrollView();
-
-                GUILayout.Space(4);
-                GUILayout.EndVertical();
-            }
-            catch (ExitGUIException)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                Debug.LogError($"[EnhancedConsole] Section menu failed: {exception.Message}\n{exception.StackTrace}");
-                Close();
-                return;
-            }
-
-            Event currentEvent = Event.current;
-            switch (currentEvent.type)
-            {
-                case EventType.MouseDown when !IsInsideWindow(currentEvent.mousePosition):
-                case EventType.KeyDown when currentEvent.keyCode == KeyCode.Escape:
-                    Close();
-                    break;
-            }
-        }
-
-        private void SetAll(bool enabled)
-        {
-            foreach (SelectiveLogSection section in sections)
-            {
-                if (section != null && section.name != null)
-                    sectionStates[section.name] = enabled;
-            }
+            EditorGUI.DrawRect(new Rect(0, 0, position.width, position.height), BACKGROUND_COLOR);
+            DrawContentSafely();
+            CloseOnEscapeOrClickOutside();
         }
 
         private void OnLostFocus()
@@ -149,6 +65,95 @@ namespace EnhancedConsole.Editor
         {
             if (currentInstance == this)
                 currentInstance = null;
+        }
+
+        private void DrawContentSafely()
+        {
+            try
+            {
+                GUILayout.BeginVertical(GUILayout.ExpandHeight(true));
+                GUILayout.Space(SPACING);
+                DrawBulkButtons();
+                GUILayout.Space(SPACING);
+                DrawSectionToggles();
+                GUILayout.Space(SPACING);
+                GUILayout.EndVertical();
+            }
+            catch (ExitGUIException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"[EnhancedConsole] Section menu failed: {exception.Message}\n{exception.StackTrace}");
+                Close();
+            }
+        }
+
+        private void DrawBulkButtons()
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Space(SPACING);
+            if (GUILayout.Button("Enable All", EditorStyles.miniButtonLeft, GUILayout.Height(ITEM_HEIGHT)))
+                SetAll(true);
+
+            if (GUILayout.Button("Disable All", EditorStyles.miniButtonRight, GUILayout.Height(ITEM_HEIGHT)))
+                SetAll(false);
+
+            GUILayout.Space(SPACING);
+            GUILayout.EndHorizontal();
+        }
+
+        private void DrawSectionToggles()
+        {
+            scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.ExpandHeight(true));
+            foreach (SelectiveLogSection section in sections)
+            {
+                if (section != null && section.name != null)
+                    DrawSectionToggle(section);
+            }
+
+            GUILayout.EndScrollView();
+        }
+
+        private void DrawSectionToggle(SelectiveLogSection section)
+        {
+            Rect lineRect = EditorGUILayout.GetControlRect(false, ITEM_HEIGHT);
+            lineRect.x += SPACING;
+            lineRect.width -= 2 * SPACING;
+
+            float colorTop = lineRect.y + (ITEM_HEIGHT - COLOR_BOX_SIZE) * 0.5f;
+            EditorGUI.DrawRect(new Rect(lineRect.x, colorTop, COLOR_BOX_SIZE, COLOR_BOX_SIZE), section.color);
+
+            float toggleLeft = lineRect.x + COLOR_BOX_SIZE + COLOR_BOX_GAP;
+            Rect toggleRect = new(toggleLeft, lineRect.y, lineRect.xMax - toggleLeft, ITEM_HEIGHT);
+            bool enabled = EditorGUI.Toggle(toggleRect, section.name, section.enabled);
+            if (enabled == section.enabled)
+                return;
+
+            section.enabled = enabled;
+            onChanged?.Invoke();
+        }
+
+        private void SetAll(bool enabled)
+        {
+            foreach (SelectiveLogSection section in sections)
+            {
+                if (section != null && section.name != null)
+                    section.enabled = enabled;
+            }
+
+            onChanged?.Invoke();
+        }
+
+        private void CloseOnEscapeOrClickOutside()
+        {
+            Event currentEvent = Event.current;
+            bool clickedOutside = currentEvent.type == EventType.MouseDown &&
+                                  !IsInsideWindow(currentEvent.mousePosition);
+            bool pressedEscape = currentEvent.type == EventType.KeyDown && currentEvent.keyCode == KeyCode.Escape;
+            if (clickedOutside || pressedEscape)
+                Close();
         }
 
         private bool IsInsideWindow(Vector2 mousePosition)
