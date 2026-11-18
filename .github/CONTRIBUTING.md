@@ -16,8 +16,12 @@ Thanks for helping out. Bug reports, documentation fixes and pull requests are w
 
 ## Make a change
 
-- Match the style of the surrounding code.
-- Add XML documentation to new public APIs.
+- Follow the [C# standards](https://github.com/sgonzalezrozo/unity-architecture-agents/blob/main/architecture/CSHARP_STANDARDS.md) this package uses. In short:
+  - `camelCase` fields without an underscore, `ALL_CAPS` constants, explicit types instead of `var`.
+  - Methods of 15 lines at most, classes of 200 lines at most, and 3 parameters at most.
+  - No LINQ or lambdas, and `for` loops over lists.
+  - A short `///` summary on each class, and no `///` on members. Other comments only for what the code can't say.
+- Put new code in the folder for its area. The README's [Architecture](../README.md#architecture) section lists them.
 - Don't leave internal notes in comments, such as planning phases or old file locations.
 - Update `README.md` when behavior changes.
 - Add an entry to `CHANGELOG.md`, and mark breaking changes with **Breaking**.
@@ -27,6 +31,16 @@ Thanks for helping out. Bug reports, documentation fixes and pull requests are w
 
 This package has no automated tests yet. Check your change in the light and dark Editor themes, and across a script recompile.
 
+Before a release, run through the whole window:
+
+1. Log from a script and from a background thread, then check search, the log level toggles and Collapse.
+2. Run **Tools > Enhanced Console > Setup**, turn on **SL** and switch sections on and off in **Sections...**.
+3. Select logs with a click, Shift-click, Ctrl-click or Cmd-click, and the arrow keys, then copy with and without **Stack Trace**.
+4. Open a log with a double-click and with Enter, from `Assets/` and from a local package.
+5. Delete a log, then delete a collapsed group.
+6. Break a script, press **Clear** and check that the compiler error stays.
+7. Try each option in the window's ⋮ menu, and resize the stack trace panel.
+
 In your pull request, list the Unity version, scripting backend and platform you tested.
 
 ## Release checklist
@@ -34,4 +48,6 @@ In your pull request, list the Unity version, scripting backend and platform you
 1. Update `version` in `package.json`.
 2. Update the version in the README badge, pin example and Project status section.
 3. Move the changelog entries under the new version.
-4. Create the matching tag, such as `v0.3.0`.
+4. Check that `llms.txt` still describes the features.
+5. Create the matching tag, such as `v0.3.0`, and push it.
+6. Create a GitHub Release from the tag, using the version's changelog entries as its notes.

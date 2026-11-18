@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class SampleLogger : MonoBehaviour
 {
-    private const float Interval = 0.5f;
+    private const float LOG_INTERVAL_SECONDS = 0.5f;
 
     private float nextLogTime;
     private int packet;
@@ -12,7 +12,7 @@ public class SampleLogger : MonoBehaviour
         if (Time.time < nextLogTime)
             return;
 
-        nextLogTime = Time.time + Interval;
+        nextLogTime = Time.time + LOG_INTERVAL_SECONDS;
         packet++;
 
         Debug.Log($"[Networking] Packet {packet} received");

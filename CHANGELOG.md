@@ -2,7 +2,15 @@
 
 All notable changes to this package are documented in this file.
 
-## [Unreleased]
+## [0.3.3] - 2026-11-18
+
+### Documentation
+
+- The README describes every feature in detail, grouped by capture, finding, reading, acting on logs and performance.
+- Added a Support section: where to report bugs, ask questions and report security problems.
+- Corrected the Troubleshooting rows for clickable stack trace lines and invalid regexes, and added one for logs that don't open.
+- The contributing guide links the C# standards the package follows, and adds a manual test pass and GitHub Release steps to the release checklist.
+- `package.json` links the changelog and license, so Package Manager shows them.
 
 ### Changed
 

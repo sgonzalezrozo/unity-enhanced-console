@@ -1,9 +1,11 @@
 {
   "name": "com.sgonzalezrozo.enhanced-console",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "displayName": "Enhanced Console",
-  "description": "Unity Editor console window for noisy logs: section and regex filtering, stack trace search, log timestamps and copying log ranges with or without stack traces. Editor-only.",
+  "description": "Unity Editor console window for noisy logs: section and regex filtering, search across messages and stack traces, log timestamps, Error Pause, keyboard navigation, and copying or deleting selected logs. Editor-only, no dependencies.",
   "documentationUrl": "https://github.com/sgonzalezrozo/unity-enhanced-console#readme",
+  "changelogUrl": "https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/sgonzalezrozo/unity-enhanced-console/blob/main/LICENSE",
   "unity": "2022.3",
   "license": "MIT",
   "author": {

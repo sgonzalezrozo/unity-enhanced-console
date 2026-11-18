@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Tested on Unity 6000.3](https://img.shields.io/badge/Unity-6000.3%20tested-black?logo=unity)](#compatibility)
-[![Version 0.3.2](https://img.shields.io/badge/version-0.3.2-blue.svg)](CHANGELOG.md)
+[![Version 0.3.3](https://img.shields.io/badge/version-0.3.3-blue.svg)](CHANGELOG.md)
 
 Enhanced Console is a free, open-source Unity Editor console window for Unity 6, for cutting through noisy logs. It adds section-based and regex log filtering, search across messages and stack traces, log times by time since startup, wall clock or frame, and copying a range of logs with or without stack traces. Click a stack trace line to open the source. It runs beside Unity's Console, adds nothing to player builds, and needs no special logging API.
 
@@ -42,25 +42,54 @@ I built and refined it on my own time in personal projects. It isn't used in pro
 
 ## Features
 
-- Live log capture while the window is open
-- Case-insensitive search across messages and stack traces
-- Toggles and counts for info, warning and error logs
-- Collapsing by message and type, with an optional exact stack trace match
-- Section filtering by name or regex, with custom sections, colors and quick toggles
-- Stack trace panel with clickable file links
-- Selecting the context object of a log: its GameObject, or the asset it was logged with
-- Multi-select and copy
-- A time column showing time since startup, wall-clock time or frame number
-- Error Pause, which pauses Play Mode on errors, exceptions and failed asserts
-- Display options: 1 to 10 lines per log, monospace font and rich text
-- Keyboard navigation: arrows, Page Up/Down, Home/End, Enter to open the source, Delete to remove the selected logs, and Ctrl+F or Cmd+F for search
-- Autoscroll: while the list is at the bottom, it follows new logs
-- The first search match in each log is highlighted
-- Logs from background threads
-- Compiler errors and warnings read from the compilation pipeline, with compiler errors kept after Clear until the code compiles
-- Clear on Play, Clear on Build and Clear on Recompile options
-- Logs preserved across domain reloads while the window is open
-- Recompile and Recompile + Asset Refresh buttons
+### Capture
+
+- **Every log, from every thread.** Logs are read through `Application.logMessageReceivedThreaded`. Logs from background threads are queued and shown on the next Editor update, with the time they were written.
+- **Compiler errors and warnings** come straight from the compilation pipeline, so they appear even when Unity doesn't send them as regular logs. Each assembly's results replace its previous ones, and a message that also arrives as a regular log is listed once.
+- **Logs survive domain reloads** while the window is open: after a recompile and when entering Play Mode. Up to 10,000 logs are kept; the oldest are dropped in chunks of 1,000.
+- **Context objects.** A log written with a context, such as `Debug.Log(message, gameObject)`, remembers that object.
+
+### Find
+
+- **Search** for plain text in messages and stack traces, ignoring case. The first match in each visible message is highlighted, except in messages with rich text tags.
+- **Log level toggles** for info, warnings and errors, each with its count. Exceptions and failed asserts count as errors.
+- **Sections** group logs by system and hide the ones you don't need:
+  - A section matches by name, ignoring case and spaces, or by a regex.
+  - Choose whether sections search the message, the stack trace or both, so a namespace or folder can be matched without tagging every log.
+  - Sections are saved per project in a ScriptableObject, each with a color. While section filtering is on, matching rows show that color as a bar.
+  - A popup turns sections on and off, with **Enable All** and **Disable All**. The toolbar shows how many are on, such as `SL (3/5)`.
+  - An invalid regex logs a warning once and falls back to the section name.
+- **Collapse** groups logs with the same message and type and shows how many times each was logged. Optionally, the stack trace must match too.
+
+### Read
+
+- **Time column** showing time since startup (`mm:ss.mmm`), the local wall-clock time (`HH:mm:ss.fff`) or the frame number (`#1234`).
+- **Display options:** 1 to 10 lines per log, a monospace font for messages and stack traces, and rich text on or off.
+- **Stack trace panel** for the selected log, resizable by dragging. Lines with a file you can open are links.
+- **Autoscroll** follows new logs while the list is at the bottom. Scrolling up pauses it, and scrolling back to the bottom resumes it.
+
+### Act
+
+- **Open the source** with a double-click, Enter or Return, or a click on a stack trace link:
+  - It opens the first frame you can open, skipping Unity's logging frames.
+  - Project paths (`Assets/`, `Packages/`) work, and so do absolute paths, such as code in a local package. Windows paths with a drive letter work too.
+  - A compiler message opens its file at the reported line.
+- **Select the context object** by clicking a log. A Component selects its GameObject, and an asset is pinged in the Project window.
+- **Copy** the selected logs with Ctrl+C or Cmd+C. Stack traces are included only while **Stack Trace** is on, so you can copy a range of messages without them.
+- **Select** with Shift-click for a range, Ctrl-click or Cmd-click to add or remove one log, and Ctrl+A or Cmd+A for all visible logs.
+- **Delete** the selected logs with Delete (Backspace on a Mac) or **Edit > Delete**. In Collapse mode, the whole group is removed. Unity's Console keeps them.
+- **Keyboard navigation:** arrows, Page Up and Page Down, Home and End, with Shift to extend the selection. The selection stays in view.
+- **Error Pause** pauses Play Mode when an error, exception or failed assert is logged.
+- **Clear** this window and Unity's Console together. Compiler errors stay until their code compiles, like in Unity's Console. Optionally clear on Play, on Build and on Recompile.
+- **Recompile** all scripts from the toolbar, optionally after an asset refresh.
+
+### Performance
+
+- The filtered list is cached, and new logs are filtered as they arrive instead of refiltering everything.
+- Collapse groups logs with a lookup table, so turning it on with 10,000 logs doesn't freeze the Editor.
+- Each log remembers which section it matched, and regexes are parsed once.
+- Only the visible rows and stack trace lines are drawn.
+- While logs arrive, the window repaints at most 30 times per second, and not at all when nothing changed.
 
 ## Compared with Unity's Console
 
@@ -104,7 +133,7 @@ Features as listed by each tool's publisher or documentation in November 2026. C
 | Requirement | Supported |
 |---|---|
 | Unity | Tested on Unity 6 (`6000.3.16f1`). The package declares `2022.3` as its minimum, but older versions aren't tested yet. |
-| Editor platforms | Not verified yet |
+| Editor platforms | Used day to day on macOS. Windows and Linux aren't verified yet. |
 | Editor themes | Light and dark are both handled in code, but neither is verified yet |
 | IDEs | Uses your External Script Editor setting. Tested IDEs aren't published yet. |
 | Player builds | The package is Editor-only and adds nothing to player builds. |
@@ -125,7 +154,7 @@ https://github.com/sgonzalezrozo/unity-enhanced-console.git
 To pin a release, add its tag:
 
 ```text
-https://github.com/sgonzalezrozo/unity-enhanced-console.git#v0.3.2
+https://github.com/sgonzalezrozo/unity-enhanced-console.git#v0.3.3
 ```
 
 ## Quick start
@@ -203,7 +232,7 @@ Assets/Features/(Shop|Inventory)/
 \bNet\b
 ```
 
-If a regex is invalid, the section falls back to matching its name as plain text.
+If a regex is invalid, Enhanced Console logs a warning once and the section falls back to matching its name as plain text.
 
 ## Using the toolbar
 
@@ -262,7 +291,7 @@ All toolbar and display settings are saved per user in EditorPrefs.
 - **Clear on Recompile** clears logs when scripts recompile.
 - Closing the window or restarting Unity clears stored logs.
 - While the window is open, Enhanced Console wraps `Debug.unityLogger.logHandler` in the Editor to read each log's context object. Every log is forwarded to the original handler, and the wrapper stays in place until the next domain reload. Unity only allows reading an object on the main thread, so logs from background threads have no context object.
-- Double-click opens the first project frame in the stack trace. Custom logger wrappers aren't skipped, so a wrapper's own line may open instead of its caller.
+- Double-click and Enter open the first frame in the stack trace whose file exists, skipping Unity's logging frames. Absolute paths, such as code in a local package, are mapped to `Packages/` when possible. Custom logger wrappers aren't skipped, so a wrapper's own line may open instead of its caller.
 - **Clear** also clears Unity's Console through the internal `UnityEditor.LogEntries` API, which a future Unity version could change.
 
 
@@ -345,10 +374,11 @@ Yes. It's MIT licensed.
 | A log isn't in a section | Check that the section name or regex matches the log, and check the filter mode |
 | Older logs are missing | Logs are only captured while the window is open, so keep it docked |
 | Copied logs have no stack traces | Turn on **Stack Trace** before copying |
-| A regex section matches by name instead | Check the pattern, because an invalid regex falls back to the section name |
+| A regex section matches by name instead | Look for an `[EnhancedConsole]` warning about the pattern. An invalid regex falls back to the section name. |
 | Clicking a log doesn't select a GameObject | Pass a GameObject or Component as the log's context, and check that the object is still loaded |
-| A log opens the wrong file | Check whether a custom logger wrapper is the first project frame in the stack trace |
-| A stack trace line isn't clickable | Only paths starting with `Assets/` or `Packages/` are clickable |
+| A log opens the wrong file | Check whether a custom logger wrapper is the first frame with a file in the stack trace |
+| Double-click or Enter does nothing | The stack trace has no file that exists on this machine, for example a log from a build machine, or a log without a stack trace |
+| A stack trace line isn't clickable | The file must exist. Project paths (`Assets/`, `Packages/`) and absolute paths, such as code in a local package, are clickable. Unity's own source paths aren't. |
 | Clicking a background-thread log doesn't select its context object | Context objects can only be read on the main thread |
 
 ## Limitations
@@ -359,11 +389,24 @@ Yes. It's MIT licensed.
 
 ## Project status
 
-Enhanced Console is a pre-release package at version `0.3.2`. Its API and behavior may change before `1.0.0`. Not yet used in a shipped game.
+Enhanced Console is a pre-release package at version `0.3.3`. Its API and behavior may change before `1.0.0`. Not yet used in a shipped game.
 
 Until `1.0.0`, minor versions (`0.x.0`) can include breaking changes, and patch versions (`0.x.y`) don't. Breaking changes are marked **Breaking** in the [changelog](CHANGELOG.md).
 
 There's no public roadmap yet. Known gaps are listed under [Limitations](#limitations), and planned work is tracked in [issues](https://github.com/sgonzalezrozo/unity-enhanced-console/issues).
+
+## Support
+
+Enhanced Console is maintained by one person in their spare time, so replies are best effort.
+
+| Need | Where |
+|---|---|
+| A bug | Open a [bug report](https://github.com/sgonzalezrozo/unity-enhanced-console/issues/new?template=bug_report.yml) with your Unity version, Editor platform and steps to reproduce |
+| A feature idea | Open a [feature request](https://github.com/sgonzalezrozo/unity-enhanced-console/issues/new?template=feature_request.yml) |
+| A question | Open an [issue](https://github.com/sgonzalezrozo/unity-enhanced-console/issues) and describe what you're trying to do |
+| A security problem | Follow the [security policy](.github/SECURITY.md). Don't open a public issue. |
+
+When something looks wrong, check the Console for messages starting with `[EnhancedConsole]`, and include them in your report.
 
 ## Contributing
 
