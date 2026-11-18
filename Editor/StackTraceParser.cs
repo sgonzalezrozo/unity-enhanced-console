@@ -1,101 +1,97 @@
 #if UNITY_EDITOR
+using System;
+using System.IO;
 using UnityEditor;
 
 namespace EnhancedConsole.Editor
 {
-	/// <summary>
-	/// Parses stack trace strings and extracts file/line information.
-	/// Single Responsibility: Stack trace parsing only.
-	/// </summary>
-	internal class StackTraceParser
-	{
-		public StackTraceLineInfo ParseLine(string line)
-		{
-			StackTraceLineInfo info = new();
+    /// <summary>
+    /// Finds the file and line of stack trace frames, keeping only files that can be opened.
+    /// </summary>
+    internal class StackTraceParser
+    {
+        private const string LOCATION_START = " (at ";
 
-			if (string.IsNullOrEmpty(line))
-				return info;
+        public StackTraceLineInfo ParseLine(string line)
+        {
+            if (!TryParseFrameLocation(line, out string path, out int lineNumber))
+                return new StackTraceLineInfo();
 
-			int atIndex = line.IndexOf(" (at ", System.StringComparison.Ordinal);
-			if (atIndex < 0)
-				return info;
+            string openablePath = GetOpenablePath(path);
+            if (openablePath == null)
+                return new StackTraceLineInfo();
 
-			int startPath = atIndex + 5;
-			int endPath = line.IndexOf(')', startPath);
-			if (endPath < 0)
-				return info;
+            return new StackTraceLineInfo { hasFileInfo = true, filePath = openablePath, lineNumber = lineNumber };
+        }
 
-			string pathAndLine = line.Substring(startPath, endPath - startPath);
-			if (!TryExtractFileInfo(pathAndLine, out string assetPath, out int lineNumber))
-				return info;
+        // The first frame that can be opened, skipping Unity's logging frames and the context handler.
+        public bool TryParseFirstLine(string stackTrace, out string filePath, out int lineNumber)
+        {
+            filePath = null;
+            lineNumber = 0;
+            if (string.IsNullOrEmpty(stackTrace))
+                return false;
 
-			if (!IsValidAssetPath(assetPath))
-				return info;
+            foreach (string line in stackTrace.Split('\n'))
+            {
+                StackTraceLineInfo info = IsLoggingFrame(line) ? new StackTraceLineInfo() : ParseLine(line);
+                if (!info.hasFileInfo)
+                    continue;
 
-			UnityEngine.Object asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath);
-			if (asset == null)
-				return info;
+                filePath = info.filePath;
+                lineNumber = info.lineNumber;
+                return true;
+            }
 
-			info.HasFileInfo = true;
-			info.FilePath = assetPath;
-			info.LineNumber = lineNumber;
+            return false;
+        }
 
-			return info;
-		}
+        // Frames look like "Type:Method () (at path:line)". The path can be absolute, for example in a local
+        // package, and on Windows it contains a drive colon, so the line number is after the last colon.
+        public static bool TryParseFrameLocation(string line, out string path, out int lineNumber)
+        {
+            path = null;
+            lineNumber = 0;
+            int start = string.IsNullOrEmpty(line) ? -1 : line.IndexOf(LOCATION_START, StringComparison.Ordinal);
+            int end = start < 0 ? -1 : line.LastIndexOf(')');
+            if (end <= start)
+                return false;
 
-	public bool TryParseFirstLine(string stackTrace, out string filePath, out int lineNumber)
-	{
-		filePath = null;
-		lineNumber = 0;
+            string location = line.Substring(start + LOCATION_START.Length, end - start - LOCATION_START.Length);
+            int colon = location.LastIndexOf(':');
+            if (colon <= 0 || !int.TryParse(location.Substring(colon + 1), out lineNumber))
+                return false;
 
-		if (string.IsNullOrEmpty(stackTrace))
-			return false;
+            path = location.Substring(0, colon);
+            return true;
+        }
 
-		string[] lines = stackTrace.Split('\n');
-		foreach (string line in lines)
-		{
-			if (string.IsNullOrEmpty(line))
-				continue;
+        // A project path (Assets/ or Packages/) when the file is in the project, the absolute path when it's a
+        // file outside it, or null when it can't be opened, such as Unity's own source paths.
+        public static string GetOpenablePath(string path)
+        {
+            if (IsProjectAsset(path))
+                return path;
 
-			// Skip LogContextHandler frames (our custom log interceptor)
-			if (line.Contains("LogContextHandler") || line.Contains("LogContextHelper"))
-				continue;
+            string logicalPath = FileUtil.GetLogicalPath(path);
+            if (IsProjectAsset(logicalPath))
+                return logicalPath;
 
-			// Skip Unity's internal Debug.Log frames
-			if (line.Contains("UnityEngine.Debug:") || line.Contains("UnityEngine.Logger:"))
-				continue;
+            return Path.IsPathRooted(path) && File.Exists(path) ? path : null;
+        }
 
-			StackTraceLineInfo info = ParseLine(line);
-			if (info.HasFileInfo)
-			{
-				filePath = info.FilePath;
-				lineNumber = info.LineNumber;
-				return true;
-			}
-		}
+        private static bool IsProjectAsset(string path)
+        {
+            bool isProjectPath = !string.IsNullOrEmpty(path) &&
+                                 (path.StartsWith("Assets/") || path.StartsWith("Packages/"));
+            return isProjectPath && AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(path) != null;
+        }
 
-		return false;
-	}
-
-		private bool TryExtractFileInfo(string pathAndLine, out string assetPath, out int lineNumber)
-		{
-			assetPath = null;
-			lineNumber = 0;
-
-			string[] parts = pathAndLine.Split(':');
-			if (parts.Length < 2)
-				return false;
-
-			assetPath = parts[0];
-			return int.TryParse(parts[1], out lineNumber);
-		}
-
-		private bool IsValidAssetPath(string path)
-		{
-			return !string.IsNullOrEmpty(path) &&
-				   (path.StartsWith("Assets/") || path.StartsWith("Packages/"));
-		}
-	}
+        private static bool IsLoggingFrame(string line)
+        {
+            return line.Contains("LogContextHandler") || line.Contains("LogContextHelper") ||
+                   line.Contains("UnityEngine.Debug:") || line.Contains("UnityEngine.Logger:");
+        }
+    }
 }
 #endif
-

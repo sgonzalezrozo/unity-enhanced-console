@@ -1,7 +1,7 @@
 #if UNITY_EDITOR
 namespace EnhancedConsole.Editor
 {
-    internal enum SLFilterMode
+    internal enum SectionFilterMode
     {
         StackAndContent,
         OnlyStack,

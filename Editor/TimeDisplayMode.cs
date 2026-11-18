@@ -4,13 +4,13 @@ namespace EnhancedConsole.Editor
     /// <summary>What the time column shows for each log.</summary>
     internal enum TimeDisplayMode
     {
-        /// <summary><c>Time.realtimeSinceStartup</c> when the log arrived, as mm:ss.mmm.</summary>
+        // Time.realtimeSinceStartup when the log arrived, as mm:ss.mmm.
         SinceStartup,
 
-        /// <summary>The local wall-clock time when the log arrived, as HH:mm:ss.fff.</summary>
+        // The local wall-clock time when the log arrived, as HH:mm:ss.fff.
         WallClock,
 
-        /// <summary><c>Time.frameCount</c> when the log arrived.</summary>
+        // Time.frameCount when the log arrived.
         Frame
     }
 }

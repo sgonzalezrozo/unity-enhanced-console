@@ -1,23 +1,33 @@
 #if UNITY_EDITOR
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace EnhancedConsole.Editor
 {
     [Serializable]
     internal class LogEntry
     {
-        public string Message;
-        public string StackTrace;
-        public LogType Type;
-        public float RealtimeSinceStartup;
-        public int Count;
-        public int ContextGameObjectInstanceId;
-        public long WallClockTicks;
-        public int FrameCount;
+        [FormerlySerializedAs("Message")]
+        public string message;
+        [FormerlySerializedAs("StackTrace")]
+        public string stackTrace;
+        [FormerlySerializedAs("Type")]
+        public LogType type;
+        [FormerlySerializedAs("RealtimeSinceStartup")]
+        public float realtimeSinceStartup;
+        [FormerlySerializedAs("Count")]
+        public int count;
+        [FormerlySerializedAs("ContextGameObjectInstanceId")]
+        public int contextGameObjectInstanceId;
+        [FormerlySerializedAs("WallClockTicks")]
+        public long wallClockTicks;
+        [FormerlySerializedAs("FrameCount")]
+        public int frameCount;
 
-        /// <summary>Path of the assembly whose compilation reported this message; empty for regular logs.</summary>
-        public string CompilerAssembly;
+        // Path of the assembly whose compilation reported this message; empty for regular logs.
+        [FormerlySerializedAs("CompilerAssembly")]
+        public string compilerAssembly;
 
         // Derived values, computed once per entry (and per display setting) instead of on every GUI event.
         [NonSerialized] private string displayText;
@@ -26,14 +36,14 @@ namespace EnhancedConsole.Editor
         [NonSerialized] private TimeDisplayMode timeTextMode;
 
         // Section match cache. Valid while SectionMatchVersion equals SectionedLogOrganizer.MatchVersion.
-        [NonSerialized] internal int SectionIndex;
-        [NonSerialized] internal int SectionMatchVersion;
+        [NonSerialized] internal int sectionIndex;
+        [NonSerialized] internal int sectionMatchVersion;
 
         internal string GetDisplayText(int maxLines)
         {
             if (displayText == null || displayTextLines != maxLines)
             {
-                displayText = LogEntryFormatter.TruncateMessage(Message, maxLines);
+                displayText = LogEntryFormatter.TruncateMessage(message, maxLines);
                 displayTextLines = maxLines;
             }
 
@@ -51,11 +61,26 @@ namespace EnhancedConsole.Editor
             return timeText;
         }
 
-        internal bool IsError => Type is LogType.Error or LogType.Exception or LogType.Assert;
+        internal static LogEntry FromCapturedLog(LogManagement.CapturedLog log)
+        {
+            return new LogEntry
+            {
+                message = log.message,
+                stackTrace = log.stackTrace,
+                type = log.type,
+                realtimeSinceStartup = log.realtimeSinceStartup,
+                wallClockTicks = log.wallClockTicks,
+                frameCount = log.frameCount,
+                count = 1,
+                contextGameObjectInstanceId = log.contextInstanceId
+            };
+        }
 
-        internal bool IsCompilerMessage => !string.IsNullOrEmpty(CompilerAssembly);
+        internal bool IsError => type is LogType.Error or LogType.Exception or LogType.Assert;
 
-        internal bool IsCompilerError => IsCompilerMessage && Type == LogType.Error;
+        internal bool IsCompilerMessage => !string.IsNullOrEmpty(compilerAssembly);
+
+        internal bool IsCompilerError => IsCompilerMessage && type == LogType.Error;
     }
 }
 #endif

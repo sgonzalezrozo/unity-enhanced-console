@@ -5,7 +5,7 @@ namespace EnhancedConsole.Editor
 {
     public static class SectionLogsConfig
     {
-        public static readonly SelectiveLogSection[] Sections = new[]
+        public static readonly SelectiveLogSection[] SECTIONS = new[]
         {
             new SelectiveLogSection("Initialization", new Color(0.3f, 0.9f, 0.6f)),
             new SelectiveLogSection("Localization", new Color(0.8f, 0.4f, 0.8f)),

@@ -8,6 +8,7 @@ namespace EnhancedConsole.Editor
     [CustomEditor(typeof(SelectiveLogsScriptableObject))]
     public class SelectiveLogsScriptableObjectEditor : UnityEditor.Editor
     {
+        private static readonly GUIContent REGEX_LABEL_CONTENT = new("Regex");
 
         private string newSectionName = "";
         private Color newSectionColor = Color.white;
@@ -15,6 +16,8 @@ namespace EnhancedConsole.Editor
 
         private ReorderableList systemDefinedList;
         private ReorderableList userDefinedList;
+        private SerializedProperty systemDefinedProperty;
+        private SerializedProperty userDefinedProperty;
 
         public override void OnInspectorGUI()
         {
@@ -26,29 +29,10 @@ namespace EnhancedConsole.Editor
             serializedObject.Update();
             config.InitializeDefaultSections();
 
-            SerializedProperty systemDefinedProp = serializedObject.FindProperty("systemDefinedSections");
-            SerializedProperty userDefinedProp = serializedObject.FindProperty("userDefinedSections");
-
-            systemDefinedList ??= new ReorderableList(serializedObject, systemDefinedProp, true, true, false, false)
-            {
-                drawHeaderCallback = rect => EditorGUI.LabelField(rect, "System Defined Sections", EditorStyles.boldLabel),
-                drawElementCallback = (rect, index, _, __) =>
-                    DrawSectionElement(rect, systemDefinedProp.GetArrayElementAtIndex(index)),
-                elementHeightCallback = index => GetElementHeight(systemDefinedProp.GetArrayElementAtIndex(index))
-            };
-
-            userDefinedList ??= new ReorderableList(serializedObject, userDefinedProp, true, true, false, true)
-            {
-                drawHeaderCallback = rect => EditorGUI.LabelField(rect, "User Defined Sections", EditorStyles.boldLabel),
-                drawElementCallback = (rect, index, _, __) =>
-                    DrawSectionElement(rect, userDefinedProp.GetArrayElementAtIndex(index)),
-                onRemoveCallback = list =>
-                {
-                    if (list.index >= 0 && list.index < userDefinedProp.arraySize)
-                        userDefinedProp.DeleteArrayElementAtIndex(list.index);
-                },
-                elementHeightCallback = index => GetElementHeight(userDefinedProp.GetArrayElementAtIndex(index))
-            };
+            systemDefinedProperty = serializedObject.FindProperty("systemDefinedSections");
+            userDefinedProperty = serializedObject.FindProperty("userDefinedSections");
+            systemDefinedList ??= CreateSystemDefinedList();
+            userDefinedList ??= CreateUserDefinedList();
 
             systemDefinedList.DoLayoutList();
             GUILayout.Space(5);
@@ -64,6 +48,63 @@ namespace EnhancedConsole.Editor
 
             EditorUtility.SetDirty(config);
             EnhancedConsoleWindow.RepaintIfOpen();
+        }
+
+        private ReorderableList CreateSystemDefinedList()
+        {
+            return new ReorderableList(serializedObject, systemDefinedProperty, true, true, false, false)
+            {
+                drawHeaderCallback = DrawSystemDefinedHeader,
+                drawElementCallback = DrawSystemDefinedElement,
+                elementHeightCallback = GetSystemDefinedElementHeight
+            };
+        }
+
+        private ReorderableList CreateUserDefinedList()
+        {
+            return new ReorderableList(serializedObject, userDefinedProperty, true, true, false, true)
+            {
+                drawHeaderCallback = DrawUserDefinedHeader,
+                drawElementCallback = DrawUserDefinedElement,
+                onRemoveCallback = RemoveUserDefinedElement,
+                elementHeightCallback = GetUserDefinedElementHeight
+            };
+        }
+
+        private static void DrawSystemDefinedHeader(Rect rect)
+        {
+            EditorGUI.LabelField(rect, "System Defined Sections", EditorStyles.boldLabel);
+        }
+
+        private static void DrawUserDefinedHeader(Rect rect)
+        {
+            EditorGUI.LabelField(rect, "User Defined Sections", EditorStyles.boldLabel);
+        }
+
+        private void DrawSystemDefinedElement(Rect rect, int index, bool isActive, bool isFocused)
+        {
+            DrawSectionElement(rect, systemDefinedProperty.GetArrayElementAtIndex(index));
+        }
+
+        private void DrawUserDefinedElement(Rect rect, int index, bool isActive, bool isFocused)
+        {
+            DrawSectionElement(rect, userDefinedProperty.GetArrayElementAtIndex(index));
+        }
+
+        private float GetSystemDefinedElementHeight(int index)
+        {
+            return GetElementHeight(systemDefinedProperty.GetArrayElementAtIndex(index));
+        }
+
+        private float GetUserDefinedElementHeight(int index)
+        {
+            return GetElementHeight(userDefinedProperty.GetArrayElementAtIndex(index));
+        }
+
+        private void RemoveUserDefinedElement(ReorderableList list)
+        {
+            if (list.index >= 0 && list.index < userDefinedProperty.arraySize)
+                userDefinedProperty.DeleteArrayElementAtIndex(list.index);
         }
 
         private void DrawSectionElement(Rect rect, SerializedProperty property)
@@ -88,7 +129,7 @@ namespace EnhancedConsole.Editor
             enabledProperty.boolValue = EditorGUI.Toggle(enabledRect, enabledProperty.boolValue);
             colorProperty.colorValue = EditorGUI.ColorField(colorRect, colorProperty.colorValue);
             EditorGUI.PropertyField(nameRect, nameProperty, GUIContent.none);
-            useRegexProperty.boolValue = EditorGUI.Toggle(regexRect, new GUIContent("Regex"), useRegexProperty.boolValue);
+            useRegexProperty.boolValue = EditorGUI.Toggle(regexRect, REGEX_LABEL_CONTENT, useRegexProperty.boolValue);
 
             if (!useRegexProperty.boolValue)
                 return;
@@ -129,15 +170,12 @@ namespace EnhancedConsole.Editor
 
                 EditorGUILayout.BeginHorizontal();
 
-                if (GUILayout.Button("Add Section"))
+                if (GUILayout.Button("Add Section") && !string.IsNullOrEmpty(newSectionName))
                 {
-                    if (!string.IsNullOrEmpty(newSectionName))
-                    {
-                        config.AddUserDefinedSection(newSectionName, newSectionColor);
-                        newSectionName = "";
-                        newSectionColor = Color.white;
-                        showNewSectionInput = false;
-                    }
+                    config.AddUserDefinedSection(newSectionName, newSectionColor);
+                    newSectionName = "";
+                    newSectionColor = Color.white;
+                    showNewSectionInput = false;
                 }
 
                 if (GUILayout.Button("Cancel"))

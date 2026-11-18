@@ -17,7 +17,8 @@ namespace EnhancedConsole.Editor
         private const float ITEM_HEIGHT = 20f;
         private const float COLOR_BOX_SIZE = 12f;
 
-        public static void Show(Rect buttonRect, SelectiveLogSection[] sectionConfigs, Dictionary<string, bool> states, Action onChangedCallback)
+        public static void Show(Rect buttonRect, SelectiveLogSection[] sectionConfigs, Dictionary<string, bool> states,
+            Action onChangedCallback)
         {
             if (currentInstance != null)
             {
@@ -82,17 +83,20 @@ namespace EnhancedConsole.Editor
 
                 foreach (SelectiveLogSection section in sections)
                 {
-                    if (section == null || section.name == null || !sectionStates.TryGetValue(section.name, out bool isEnabled))
+                    if (section == null || section.name == null ||
+                        !sectionStates.TryGetValue(section.name, out bool isEnabled))
                         continue;
 
                     Rect lineRect = EditorGUILayout.GetControlRect(false, ITEM_HEIGHT);
                     lineRect.x += 4;
                     lineRect.width -= 8;
 
-                    Rect colorBoxRect = new Rect(lineRect.x, lineRect.y + (ITEM_HEIGHT - COLOR_BOX_SIZE) * 0.5f, COLOR_BOX_SIZE, COLOR_BOX_SIZE);
+                    Rect colorBoxRect = new(lineRect.x, lineRect.y + (ITEM_HEIGHT - COLOR_BOX_SIZE) * 0.5f,
+                        COLOR_BOX_SIZE, COLOR_BOX_SIZE);
                     EditorGUI.DrawRect(colorBoxRect, section.color);
 
-                    Rect toggleRect = new Rect(lineRect.x + COLOR_BOX_SIZE + 6, lineRect.y, lineRect.width - COLOR_BOX_SIZE - 6, ITEM_HEIGHT);
+                    Rect toggleRect = new(lineRect.x + COLOR_BOX_SIZE + 6, lineRect.y,
+                        lineRect.width - COLOR_BOX_SIZE - 6, ITEM_HEIGHT);
                     bool newState = EditorGUI.Toggle(toggleRect, section.name, isEnabled);
                     if (newState == isEnabled)
                         continue;
@@ -110,9 +114,9 @@ namespace EnhancedConsole.Editor
             {
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Debug.LogError($"[SectionLogsMenuWindow] Error in OnGUI: {ex.Message}");
+                Debug.LogError($"[EnhancedConsole] Section menu failed: {exception.Message}\n{exception.StackTrace}");
                 Close();
                 return;
             }
@@ -120,7 +124,7 @@ namespace EnhancedConsole.Editor
             Event currentEvent = Event.current;
             switch (currentEvent.type)
             {
-                case EventType.MouseDown when !new Rect(0, 0, position.width, position.height).Contains(currentEvent.mousePosition):
+                case EventType.MouseDown when !IsInsideWindow(currentEvent.mousePosition):
                 case EventType.KeyDown when currentEvent.keyCode == KeyCode.Escape:
                     Close();
                     break;
@@ -145,6 +149,11 @@ namespace EnhancedConsole.Editor
         {
             if (currentInstance == this)
                 currentInstance = null;
+        }
+
+        private bool IsInsideWindow(Vector2 mousePosition)
+        {
+            return new Rect(0, 0, position.width, position.height).Contains(mousePosition);
         }
     }
 }

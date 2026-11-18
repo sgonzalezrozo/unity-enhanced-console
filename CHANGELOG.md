@@ -2,7 +2,7 @@
 
 All notable changes to this package are documented in this file.
 
-## [Unreleased]
+## [0.3.2] - 2026-11-18
 
 ### Added
 
@@ -23,6 +23,10 @@ All notable changes to this package are documented in this file.
 
 ### Changed
 
+- A section with an invalid regex now logs a warning once, instead of silently matching its name as plain text.
+- **Force Recompile** logs one line instead of three.
+- `EnhancedConsoleWindow` is split into small classes by responsibility: preferences, log capture, toolbar, log list, input, selection and details panel. `LogEntryManager` and `SectionedLogOrganizer` are split the same way. Behavior is unchanged.
+- Code cleanup to follow the C# standards in [unity-architecture-agents](https://github.com/sgonzalezrozo/unity-architecture-agents): naming, spaces instead of tabs, 120-character lines, no lambdas, cached toolbar content and named sizes. Renamed serialized fields keep their data through `[FormerlySerializedAs]`.
 - Faster with many logs. The filtered list is cached and only new logs are filtered, instead of copying and filtering every log several times per repaint. Collapse uses a lookup table instead of a linear search, so turning it on with 10,000 logs no longer freezes the Editor.
 - Section matching no longer allocates for every log on every repaint. Regexes are parsed once, and each log remembers which section it matched.
 - An invalid section regex is detected once, instead of throwing an exception for every log on every repaint.
@@ -34,6 +38,8 @@ All notable changes to this package are documented in this file.
 
 ### Fixed
 
+- Double-click and Enter didn't open logs from local packages (`file:` dependencies), whose stack traces have absolute paths. Absolute paths now open, mapped to `Packages/` when possible, and Windows paths with a drive letter are read correctly.
+- Enter or Return didn't open the selected log when the search field had keyboard focus, for example after searching. The search field took the key to start editing.
 - A section with an empty name matched every log.
 - The selection jumped to a different log when a filter changed, Collapse was toggled or old logs were pruned. The selected log is found again instead, and multi-selection is cleared.
 - `Debug.Log(message, context)` from a background thread threw an exception, because the context handler read the context object off the main thread. The context is now read only for main-thread logs.

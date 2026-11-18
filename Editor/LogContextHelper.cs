@@ -68,7 +68,6 @@ namespace EnhancedConsole.Editor
             lastLoggedContextInstanceId = instanceId;
         }
 
-        /// <summary>Instance ID of the last log's context object on this thread. Can be a GameObject or a Component.</summary>
         public static int GetLastLogContextInstanceId()
         {
             return lastLoggedContextInstanceId;
@@ -79,7 +78,6 @@ namespace EnhancedConsole.Editor
             lastLoggedContextInstanceId = 0;
         }
 
-        /// <summary>Returns and clears the context captured for the log being received on this thread.</summary>
         internal static int ConsumeLogContextInstanceId()
         {
             int id = lastLoggedContextInstanceId;
@@ -87,10 +85,8 @@ namespace EnhancedConsole.Editor
             return id;
         }
 
-        /// <summary>
-        /// Resolves a captured context ID in O(1). A Component resolves to its GameObject; other objects,
-        /// such as assets, resolve to themselves. Returns null when the object no longer exists. Main thread only.
-        /// </summary>
+        // Resolves a captured context ID in O(1). A Component resolves to its GameObject; other objects, such as
+        // assets, resolve to themselves. Returns null when the object no longer exists. Main thread only.
         internal static Object ResolveContextObject(int instanceId)
         {
             if (instanceId == 0)

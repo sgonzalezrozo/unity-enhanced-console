@@ -3,9 +3,9 @@ namespace EnhancedConsole.Editor
 {
     internal struct StackTraceLineInfo
     {
-        public bool HasFileInfo;
-        public string FilePath;
-        public int LineNumber;
+        public bool hasFileInfo;
+        public string filePath;
+        public int lineNumber;
     }
 }
 #endif

@@ -11,7 +11,7 @@ namespace EnhancedConsole.Editor
 
         public void OnPreprocessBuild(BuildReport report)
         {
-            if (EditorPrefs.GetBool(EnhancedConsoleWindow.PREF_CLEAR_ON_BUILD, false))
+            if (EditorPrefs.GetBool(Preferences.ConsolePreferences.CLEAR_ON_BUILD_KEY, false))
                 EnhancedConsoleWindow.ClearForBuild();
         }
     }

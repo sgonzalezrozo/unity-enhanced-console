@@ -1,6 +1,6 @@
 {
   "name": "com.sgonzalezrozo.enhanced-console",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "displayName": "Enhanced Console",
   "description": "Unity Editor console window for noisy logs: section and regex filtering, stack trace search, log timestamps and copying log ranges with or without stack traces. Editor-only.",
   "documentationUrl": "https://github.com/sgonzalezrozo/unity-enhanced-console#readme",

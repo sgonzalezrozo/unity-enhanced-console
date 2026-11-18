@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Tested on Unity 6000.3](https://img.shields.io/badge/Unity-6000.3%20tested-black?logo=unity)](#compatibility)
-[![Version 0.3.1](https://img.shields.io/badge/version-0.3.1-blue.svg)](CHANGELOG.md)
+[![Version 0.3.2](https://img.shields.io/badge/version-0.3.2-blue.svg)](CHANGELOG.md)
 
 Enhanced Console is a free, open-source Unity Editor console window for Unity 6, for cutting through noisy logs. It adds section-based and regex log filtering, search across messages and stack traces, log times by time since startup, wall clock or frame, and copying a range of logs with or without stack traces. Click a stack trace line to open the source. It runs beside Unity's Console, adds nothing to player builds, and needs no special logging API.
 
@@ -125,7 +125,7 @@ https://github.com/sgonzalezrozo/unity-enhanced-console.git
 To pin a release, add its tag:
 
 ```text
-https://github.com/sgonzalezrozo/unity-enhanced-console.git#v0.3.1
+https://github.com/sgonzalezrozo/unity-enhanced-console.git#v0.3.2
 ```
 
 ## Quick start
@@ -268,14 +268,21 @@ All toolbar and display settings are saved per user in EditorPrefs.
 
 ## Architecture
 
-For contributors:
+For contributors. Each folder under `Editor/` holds one area:
 
-| Type | Purpose |
+| Folder or type | Purpose |
 |---|---|
-| `EnhancedConsoleWindow` | Coordinates the UI and editor integration |
-| `LogEntryManager` | Stores, groups and rebuilds log entries |
+| `EnhancedConsoleWindow` | Creates the window's parts, connects them to Editor events and draws them |
+| `Window/ConsoleContext` | Shared state and services for one window, and commands such as Clear |
+| `Window/Toolbar/` | Toolbar controls: Clear, Collapse, Error Pause, Stack Trace, Time, Recompile, search, log type toggles, section filter |
+| `Window/LogList/` | The scrolling list, row drawing, search highlight, mouse and keyboard input, copy and delete |
+| `Window/Details/` | The stack trace panel and its resize handle |
+| `Window/LogSelection` | Which logs are selected, and how the selection follows its logs when the view is rebuilt |
+| `LogCapture/` | Receives logs from every thread and compiler messages from the compilation pipeline |
+| `LogManagement/` | Stores logs and keeps the collapsed and filtered views in step with them |
+| `Sections/` | Compiles section names and regexes into matchers |
+| `Preferences/` | Settings kept in EditorPrefs |
 | `LogFilterManager` | Combines log level, search and section filters |
-| `ConsoleSearchEngine` | Handles message and stack trace search |
 | `SectionedLogOrganizer` | Applies section rules and filter modes |
 | `StackTraceParser` | Extracts file paths and line numbers |
 | `LogContextHelper` | Captures the context object passed with a log |
@@ -352,7 +359,7 @@ Yes. It's MIT licensed.
 
 ## Project status
 
-Enhanced Console is a pre-release package at version `0.3.1`. Its API and behavior may change before `1.0.0`. Not yet used in a shipped game.
+Enhanced Console is a pre-release package at version `0.3.2`. Its API and behavior may change before `1.0.0`. Not yet used in a shipped game.
 
 Until `1.0.0`, minor versions (`0.x.0`) can include breaking changes, and patch versions (`0.x.y`) don't. Breaking changes are marked **Breaking** in the [changelog](CHANGELOG.md).
 

@@ -3,40 +3,39 @@ using System;
 
 namespace EnhancedConsole.Editor
 {
-	/// <summary>
-	/// Implements search and text filtering across log entries.
-	/// Single Responsibility: Search functionality only.
-	/// </summary>
-	internal class ConsoleSearchEngine
-	{
-		private string searchFilter = "";
+    /// <summary>
+    /// Matches the search text against a log's message and stack trace, ignoring case.
+    /// </summary>
+    internal class ConsoleSearchEngine
+    {
+        private string searchFilter = "";
 
-		public void SetSearchFilter(string filter)
-		{
-			searchFilter = filter ?? "";
-		}
+        public void SetSearchFilter(string filter)
+        {
+            searchFilter = filter ?? "";
+        }
 
-		public string GetSearchFilter()
-		{
-			return searchFilter;
-		}
+        public string GetSearchFilter()
+        {
+            return searchFilter;
+        }
 
-		public bool MatchesSearchFilter(LogEntry log)
-		{
-			if (string.IsNullOrEmpty(searchFilter))
-				return true;
+        public bool MatchesSearchFilter(LogEntry log)
+        {
+            if (string.IsNullOrEmpty(searchFilter))
+                return true;
 
-			return SearchInText(log.Message, searchFilter) ||
-				   SearchInText(log.StackTrace, searchFilter);
-		}
+            return SearchInText(log.message, searchFilter) ||
+                   SearchInText(log.stackTrace, searchFilter);
+        }
 
-		private static bool SearchInText(string text, string searchTerm)
-		{
-			if (string.IsNullOrEmpty(text))
-				return false;
+        private static bool SearchInText(string text, string searchTerm)
+        {
+            if (string.IsNullOrEmpty(text))
+                return false;
 
-			return text.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0;
-		}
-	}
+            return text.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+    }
 }
 #endif
