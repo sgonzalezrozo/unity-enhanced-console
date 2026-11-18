@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Tested on Unity 6000.3](https://img.shields.io/badge/Unity-6000.3%20tested-black?logo=unity)](#compatibility)
-[![Version 0.3.0](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
+[![Version 0.3.1](https://img.shields.io/badge/version-0.3.1-blue.svg)](CHANGELOG.md)
 
 Enhanced Console is a free, open-source Unity Editor console window for Unity 6, for cutting through noisy logs. It adds section-based and regex log filtering, search across messages and stack traces, log timestamps, and copying a range of logs with or without stack traces. Click a stack trace line to open the source. It runs beside Unity's Console, adds nothing to player builds, and needs no special logging API.
 
@@ -98,7 +98,7 @@ https://github.com/sgonzalezrozo/unity-enhanced-console.git
 To pin a release, add its tag:
 
 ```text
-https://github.com/sgonzalezrozo/unity-enhanced-console.git#v0.3.0
+https://github.com/sgonzalezrozo/unity-enhanced-console.git#v0.3.1
 ```
 
 ## Quick start
@@ -307,7 +307,7 @@ Yes. It's MIT licensed.
 
 ## Project status
 
-Enhanced Console is a pre-release package at version `0.3.0`. Its API and behavior may change before `1.0.0`. Not yet used in a shipped game.
+Enhanced Console is a pre-release package at version `0.3.1`. Its API and behavior may change before `1.0.0`. Not yet used in a shipped game.
 
 Until `1.0.0`, minor versions (`0.x.0`) can include breaking changes, and patch versions (`0.x.y`) don't. Breaking changes are marked **Breaking** in the [changelog](CHANGELOG.md).
 

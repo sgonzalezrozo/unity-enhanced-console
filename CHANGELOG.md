@@ -4,12 +4,16 @@ All notable changes to this package are documented in this file.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-17
+
+### Added
+
+- After the package is imported, a dialog links to the documentation, once per project. **Tools > Enhanced Console > Documentation** opens it at any time.
+- `documentationUrl` in `package.json`, so the Package Manager links to the documentation.
+
 ### Documentation
 
 - An FAQ, `llms.txt` and more package keywords.
-
-### Documentation
-
 - Said that the package isn't used in production or in a shipped game yet.
 
 ## [0.3.0] - 2026-11-03
