@@ -6,7 +6,7 @@
 [![Tested on Unity 6000.3](https://img.shields.io/badge/Unity-6000.3%20tested-black?logo=unity)](#compatibility)
 [![Version 0.3.1](https://img.shields.io/badge/version-0.3.1-blue.svg)](CHANGELOG.md)
 
-Enhanced Console is a free, open-source Unity Editor console window for Unity 6, for cutting through noisy logs. It adds section-based and regex log filtering, search across messages and stack traces, log timestamps, and copying a range of logs with or without stack traces. Click a stack trace line to open the source. It runs beside Unity's Console, adds nothing to player builds, and needs no special logging API.
+Enhanced Console is a free, open-source Unity Editor console window for Unity 6, for cutting through noisy logs. It adds section-based and regex log filtering, search across messages and stack traces, log times by time since startup, wall clock or frame, and copying a range of logs with or without stack traces. Click a stack trace line to open the source. It runs beside Unity's Console, adds nothing to player builds, and needs no special logging API.
 
 | Everything, all at once | With the `Networking` section hidden |
 |---|---|
@@ -39,7 +39,6 @@ I built and refined it on my own time in personal projects. It isn't used in pro
 
 - Have a small project and Unity's Console is enough
 - Need to view logs from device builds. Enhanced Console only runs in the Unity Editor.
-- Need logs from background threads
 
 ## Features
 
@@ -50,27 +49,55 @@ I built and refined it on my own time in personal projects. It isn't used in pro
 - Section filtering by name or regex, with custom sections, colors and quick toggles
 - Stack trace panel with clickable file links
 - Selecting the context object of a log: its GameObject, or the asset it was logged with
-- Multi-select, copy and optional log times
+- Multi-select and copy
+- A time column showing time since startup, wall-clock time or frame number
+- Error Pause, which pauses Play Mode on errors, exceptions and failed asserts
+- Display options: 1 to 10 lines per log, monospace font and rich text
+- Keyboard navigation: arrows, Page Up/Down, Home/End, Enter to open the source, Delete to remove the selected logs, and Ctrl+F or Cmd+F for search
+- Autoscroll: while the list is at the bottom, it follows new logs
+- The first search match in each log is highlighted
+- Logs from background threads
+- Compiler errors and warnings read from the compilation pipeline, with compiler errors kept after Clear until the code compiles
 - Clear on Play, Clear on Build and Clear on Recompile options
 - Logs preserved across domain reloads while the window is open
 - Recompile and Recompile + Asset Refresh buttons
 
 ## Compared with Unity's Console
 
-Enhanced Console runs beside Unity's Console and doesn't replace it.
+Enhanced Console runs beside Unity's Console and doesn't replace it. Unity's column reflects the [Unity 6 Console manual](https://docs.unity3d.com/Manual/Console.html), checked in November 2026.
 
 | | Unity's Console | Enhanced Console |
 |---|---|---|
-| Search and log level toggles | Yes | Yes |
-| Collapse | Yes | Yes, with an optional exact stack trace match |
-| Clear on Play, Build and Recompile | Yes | Yes |
+| Log level toggles with counts | Yes | Yes |
+| Search | One exact substring at a time | Plain text in messages and stack traces, ignoring case |
+| Highlight the search match | Yes | Yes, unless the message has rich text tags |
 | Hide logs by system | No | Yes, with sections |
 | Regex matching | No | Yes, per section |
-| Copy a range of logs | Depends on the Unity version | Yes, with or without stack traces |
-| Pause on error | Yes | No |
+| Collapse | Yes | Yes, with an optional exact stack trace match |
+| Clear on Play, Build and Recompile | Yes | Yes |
+| Compiler errors kept after Clear | Yes | Yes |
+| Time on each log | Wall-clock time | Time since startup, wall-clock time or frame number |
+| Lines per log and monospace font | Yes | Yes |
+| Copy a range of logs | Not documented | Yes, with or without stack traces |
+| Keyboard: Page Up/Down, Home/End, Enter to open | Not documented | Yes |
+| Delete individual logs | No, only Clear | Yes, with the Delete key |
+| Pause on error | Yes | Yes |
+| Hide `[HideInCallstack]` frames | Yes | No |
+| Open the Editor and Player log files | Yes | No |
 | Logs from before the window opened | Yes | No |
-| Logs from background threads | Yes | No |
+| Logs from background threads | Yes | Yes |
 | Logs from device builds | Yes, by connecting to the player | No |
+
+## Compared with other tools
+
+Features as listed by each tool's publisher or documentation in November 2026. Check their pages for the current details.
+
+| Tool | Where it's stronger | Where Enhanced Console differs |
+|---|---|---|
+| [Editor Console Pro](https://assetstore.unity.com/packages/tools/utilities/editor-console-pro-11889) (paid) | Search by file, class or GameObject name, with regex. Ignore specific logs. Export to a text file. Remote logs from standalone and mobile builds. Years of releases and reviews. | Free and open source. Sections are saved per project and can match the message, the stack trace or both. Runs beside Unity's Console. |
+| [Debug.Log Extensions](https://assetstore.unity.com/packages/tools/utilities/debug-log-extensions-162798) (paid) | Channels from `[Tag]` prefixes, plus extra logging calls such as `Debug.LogIf` and `Debug.LogToFile`, and stripping logs from release builds. | Sections can match stack traces and regexes, so a namespace or folder can be filtered without tags. No logging API to adopt. |
+| [Rider's Unity log view](https://www.jetbrains.com/help/rider/Unity_window.html) | Opens any file, class or method named in a log. Edit Mode and Play Mode toggles. | Works without Rider. Sections, regex, range copying, a stack trace panel and Error Pause. |
+| Runtime consoles such as [In-game Debug Console](https://openupm.com/packages/com.yasirkula.ingamedebugconsole/), [SRDebugger](https://assetstore.unity.com/packages/tools/gui/srdebugger-console-tools-on-device-27688) and [Quantum Console](https://assetstore.unity.com/packages/tools/utilities/quantum-console-211046) | Logs in player builds and on devices, and commands typed at runtime. SRDebugger adds an options panel and bug reporter. | Built for working through Editor logs: sections, stack trace links and opening the source. Nothing is added to builds. |
 
 ## Compatibility
 
@@ -186,20 +213,39 @@ If a regex is invalid, the section falls back to matching its name as plain text
 | Clear arrow | Set Clear on Play, Clear on Build and Clear on Recompile |
 | Collapse | Group repeated logs with the same message and type |
 | Collapse arrow | Also require an exact stack trace match |
+| Error Pause | Pause Play Mode when an error, exception or failed assert is logged |
 | Stack Trace | Show or hide the resizable stack trace panel |
-| Time | Show or hide each log's time, in `mm:ss.mmm`, from `Time.realtimeSinceStartup` |
+| Time | Show or hide the time column |
+| Time arrow | Show **Since Startup** (`mm:ss.mmm` from `Time.realtimeSinceStartup`), **Wall Clock** (local `HH:mm:ss.fff`) or **Frame** (`#` and `Time.frameCount`) |
 | Recompile | Request a script recompile, available outside Play Mode |
 | Recompile arrow | Choose Recompile Only or Recompile and Asset Refresh |
 | Search | Find plain text in messages and stack traces, ignoring case |
 | Info, warning, error | Show or hide each log level, with counts |
 | SL | Turn section filtering on or off |
 
+The window's ⋮ menu has display options:
+
+| Option | Purpose |
+|---|---|
+| Log Entry | Show 1 to 10 lines of each message in the list |
+| Time | The same choices as the Time arrow |
+| Use Monospace Font | Use a fixed-width font for messages and stack traces |
+| Rich Text | Render tags such as `<color>` and `<b>`. Turn it off to see the tags as text. |
+
+All toolbar and display settings are saved per user in EditorPrefs.
+
 ## Keyboard and mouse
 
 | Action | Result |
 |---|---|
 | Click | Select a log and its context object, if it has one |
-| Up and Down arrows | Move the selection |
+| Up and Down arrows | Move the selection, keeping it in view |
+| Page Up and Page Down | Move the selection by a page |
+| Home and End | Select the first or last log |
+| Shift with any of the keys above | Extend the selection |
+| Enter or Return | Open the selected log's source file |
+| Delete (Backspace on a Mac) | Remove the selected logs and clear the selection. In Collapse mode, a row's whole group is removed. Unity's Console keeps them. |
+| Ctrl+F or Cmd+F | Focus the search field |
 | Shift-click | Select a range |
 | Ctrl-click or Cmd-click | Add or remove a log from the selection |
 | Ctrl+A or Cmd+A | Select all visible logs |
@@ -208,17 +254,17 @@ If a regex is invalid, the section falls back to matching its name as plain text
 
 ## How log capture works
 
-- Enhanced Console uses `Application.logMessageReceived`, so it captures main-thread logs only.
+- Enhanced Console uses `Application.logMessageReceivedThreaded`, so it captures logs from every thread. Logs from background threads are queued and added on the next Editor update, with the time they were written.
+- Compiler errors and warnings come from `CompilationPipeline.assemblyCompilationFinished`. Each assembly's results replace its previous ones, and the same message arriving as a regular log isn't listed twice.
+- **Clear** keeps compiler errors, like Unity's Console. They're removed when their assembly compiles.
 - The window stores up to 10,000 entries in memory.
 - Logs are kept across domain reloads while the window is open, including after a recompile or entering Play Mode.
 - **Clear on Recompile** clears logs when scripts recompile.
 - Closing the window or restarting Unity clears stored logs.
-- While the window is open, Enhanced Console wraps `Debug.unityLogger.logHandler` in the Editor to read each log's context object. Every log is forwarded to the original handler, and the wrapper stays in place until the next domain reload.
+- While the window is open, Enhanced Console wraps `Debug.unityLogger.logHandler` in the Editor to read each log's context object. Every log is forwarded to the original handler, and the wrapper stays in place until the next domain reload. Unity only allows reading an object on the main thread, so logs from background threads have no context object.
 - Double-click opens the first project frame in the stack trace. Custom logger wrappers aren't skipped, so a wrapper's own line may open instead of its caller.
 - **Clear** also clears Unity's Console through the internal `UnityEditor.LogEntries` API, which a future Unity version could change.
 
-
-Enhanced Console only shows what reaches `Application.logMessageReceived`. It doesn't read compiler results directly, and whether compiler errors always appear hasn't been verified yet. If your scripts stop compiling, check Unity's Console.
 
 ## Architecture
 
@@ -242,7 +288,7 @@ Create sections in Enhanced Console, named after a tag or namespace, or with a r
 
 ### Enhanced Console vs Unity's Console?
 
-It runs beside Unity's Console and adds sections, regex, timestamps and range copying. Unity's Console still covers background threads, device builds and pause on error. See [Compared with Unity's Console](#compared-with-unitys-console).
+It runs beside Unity's Console and adds sections, regex, search in stack traces, time since startup or frame number, and range copying. Unity's Console still covers device builds and logs from before the window opened. See [Compared with Unity's Console](#compared-with-unitys-console).
 
 ### Can I copy several logs without their stack traces?
 
@@ -266,7 +312,7 @@ Not directly. Agents read Unity's Console through Unity MCP or batch-mode logs, 
 
 ### Is there a better console for Unity?
 
-There are several Editor console replacements. Enhanced Console is a free one that adds sections, regex, timestamps and range copying beside Unity's own Console, rather than replacing it. See [Is it right for your project?](#is-it-right-for-your-project).
+There are several Editor console replacements. Enhanced Console is a free one that adds sections, regex, search in stack traces, time since startup or frame number, and range copying beside Unity's own Console, rather than replacing it. See [Compared with other tools](#compared-with-other-tools).
 
 ### How do I hide noisy logs in the Unity Console?
 
@@ -296,13 +342,13 @@ Yes. It's MIT licensed.
 | Clicking a log doesn't select a GameObject | Pass a GameObject or Component as the log's context, and check that the object is still loaded |
 | A log opens the wrong file | Check whether a custom logger wrapper is the first project frame in the stack trace |
 | A stack trace line isn't clickable | Only paths starting with `Assets/` or `Packages/` are clickable |
-| A log from a background thread is missing | Background-thread logs aren't captured |
+| Clicking a background-thread log doesn't select its context object | Context objects can only be read on the main thread |
 
 ## Limitations
 
 - Logs aren't kept after closing the window or restarting Unity.
 - The log handler wrapper adds a `LogContextHandler` frame to stack traces, so double-clicking a log in Unity's own Console can open that file instead of your code.
-- Logs aren't captured from background threads or device builds.
+- Logs aren't captured from device builds.
 
 ## Project status
 

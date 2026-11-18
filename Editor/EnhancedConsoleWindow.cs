@@ -1,12 +1,16 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 using System.Reflection;
 using System.Text;
 using EnhancedConsole.Editor.LogManagement;
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace EnhancedConsole.Editor
 {
@@ -14,10 +18,12 @@ namespace EnhancedConsole.Editor
     /// EnhancedConsoleWindow: Main window coordinator for the Enhanced Console.
     /// Responsibility: Orchestrate window lifecycle and delegate to focused components.
     /// </summary>
-    public class EnhancedConsoleWindow : EditorWindow
+    public class EnhancedConsoleWindow : EditorWindow, IHasCustomMenu
     {
         private const int TOOLBAR_HEIGHT = 20;
-        private const int LOG_ENTRY_HEIGHT = 32;
+        private const float MIN_ROW_HEIGHT = 32f;
+        private const int MAX_LOG_ENTRY_LINES = 10;
+        private const string SEARCH_CONTROL_NAME = "EnhancedConsoleSearch";
         private const float DEFAULT_DETAILS_HEIGHT = 200f;
         private const string PREF_CLEAR_ON_PLAY = "EnhancedConsole_ClearOnPlay";
         internal const string PREF_CLEAR_ON_BUILD = "EnhancedConsole_ClearOnBuild";
@@ -29,6 +35,11 @@ namespace EnhancedConsole.Editor
         private const string PREF_DETAILS_HEIGHT = "EnhancedConsole_DetailsHeight";
         private const string PREF_SL_FILTER_MODE = "EnhancedConsole_SL_FilterMode";
         private const string PREF_RECOMPILE_MODE = "EnhancedConsole_RecompileMode";
+        private const string PREF_TIME_MODE = "EnhancedConsole_TimeMode";
+        private const string PREF_LOG_ENTRY_LINES = "EnhancedConsole_LogEntryLines";
+        private const string PREF_MONOSPACE = "EnhancedConsole_Monospace";
+        private const string PREF_RICH_TEXT = "EnhancedConsole_RichText";
+        private const string PREF_ERROR_PAUSE = "EnhancedConsole_ErrorPause";
         private const float STACK_TRACE_LINE_HEIGHT = 16f;
 
         // New logs mark the window dirty; it repaints at most this often instead of once (plus a
@@ -56,6 +67,22 @@ namespace EnhancedConsole.Editor
         private bool _isResizingDetails;
         private bool _hadFocus = true;
         private bool _recompileWithAssetRefresh;
+        private bool _errorPause;
+
+        // Display options, set from the toolbar and the window's ⋮ menu.
+        private TimeDisplayMode _timeDisplayMode = TimeDisplayMode.SinceStartup;
+        private int _logEntryLines = 1;
+        private bool _useMonospaceFont;
+        private bool _richText = true;
+        private float _rowHeight = MIN_ROW_HEIGHT;
+        private float _timeColumnWidth = -1f;
+        private static Font monospaceFont;
+
+        // Keyboard navigation
+        private bool _scrollToSelection;
+        private bool _followNewest = true;
+        private readonly GUIContent _measureContent = new();
+        private float _visibleListHeight;
 
         private float _detailsHeight = DEFAULT_DETAILS_HEIGHT;
 
@@ -74,7 +101,14 @@ namespace EnhancedConsole.Editor
         private GUIStyle _logCountStyle;
         private GUIStyle _stackTraceLineStyle;
         private GUIStyle _stackTraceLineClickableStyle;
-        private bool _repaintPending;
+        private volatile bool _repaintPending;
+
+        // Background-thread logs are queued with the times they were written, then added on the main thread.
+        private readonly ConcurrentQueue<PendingLog> _pendingLogs = new();
+        private static readonly Stopwatch threadSafeClock = Stopwatch.StartNew();
+        private int _mainThreadId;
+        private double _realtimeOffset;
+        private volatile int _lastFrameCount;
         private double _lastRepaintTime;
         private bool _guiErrorLogged;
 
@@ -139,12 +173,16 @@ namespace EnhancedConsole.Editor
         {
             LogContextHelper.Initialize();
             LogContextHelper.ClearLogContext();
-            Application.logMessageReceived += HandleLog;
+            _mainThreadId = Thread.CurrentThread.ManagedThreadId;
+            SyncThreadSafeClock();
+            // The threaded event receives logs from every thread, the main thread included.
+            Application.logMessageReceivedThreaded += HandleLog;
             EditorApplication.update += OnEditorUpdate;
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             CompilationPipeline.compilationStarted += OnCompilationStarted;
             CompilationPipeline.compilationFinished += OnCompilationFinished;
+            CompilationPipeline.assemblyCompilationFinished += OnAssemblyCompilationFinished;
         }
 
         private void OnDisable()
@@ -156,12 +194,13 @@ namespace EnhancedConsole.Editor
 
         private void UnregisterEventHandlers()
         {
-            Application.logMessageReceived -= HandleLog;
+            Application.logMessageReceivedThreaded -= HandleLog;
             EditorApplication.update -= OnEditorUpdate;
             EditorApplication.playModeStateChanged -= OnPlayModeChanged;
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             CompilationPipeline.compilationStarted -= OnCompilationStarted;
             CompilationPipeline.compilationFinished -= OnCompilationFinished;
+            CompilationPipeline.assemblyCompilationFinished -= OnAssemblyCompilationFinished;
         }
 
 
@@ -195,6 +234,13 @@ namespace EnhancedConsole.Editor
             _showStackTrace = EditorPrefs.GetBool(PREF_SHOW_STACK_TRACE, false);
             _detailsHeight = EditorPrefs.GetFloat(PREF_DETAILS_HEIGHT, DEFAULT_DETAILS_HEIGHT);
             _recompileWithAssetRefresh = EditorPrefs.GetBool(PREF_RECOMPILE_MODE, false);
+            _errorPause = EditorPrefs.GetBool(PREF_ERROR_PAUSE, false);
+            _timeDisplayMode = (TimeDisplayMode)EditorPrefs.GetInt(PREF_TIME_MODE, (int)TimeDisplayMode.SinceStartup);
+            if (!Enum.IsDefined(typeof(TimeDisplayMode), _timeDisplayMode))
+                _timeDisplayMode = TimeDisplayMode.SinceStartup;
+            _logEntryLines = Mathf.Clamp(EditorPrefs.GetInt(PREF_LOG_ENTRY_LINES, 1), 1, MAX_LOG_ENTRY_LINES);
+            _useMonospaceFont = EditorPrefs.GetBool(PREF_MONOSPACE, false);
+            _richText = EditorPrefs.GetBool(PREF_RICH_TEXT, true);
 
             SLFilterMode filterMode = (SLFilterMode)EditorPrefs.GetInt(PREF_SL_FILTER_MODE, (int)SLFilterMode.StackAndContent);
             _sectionOrganizer.SetFilterMode(filterMode);
@@ -236,6 +282,11 @@ namespace EnhancedConsole.Editor
             EditorPrefs.SetBool(PREF_SHOW_STACK_TRACE, _showStackTrace);
             EditorPrefs.SetFloat(PREF_DETAILS_HEIGHT, _detailsHeight);
             EditorPrefs.SetBool(PREF_RECOMPILE_MODE, _recompileWithAssetRefresh);
+            EditorPrefs.SetBool(PREF_ERROR_PAUSE, _errorPause);
+            EditorPrefs.SetInt(PREF_TIME_MODE, (int)_timeDisplayMode);
+            EditorPrefs.SetInt(PREF_LOG_ENTRY_LINES, _logEntryLines);
+            EditorPrefs.SetBool(PREF_MONOSPACE, _useMonospaceFont);
+            EditorPrefs.SetBool(PREF_RICH_TEXT, _richText);
             EditorPrefs.SetBool("EnhancedConsole_SL_Active", _sectionOrganizer.IsFilterActive);
             EditorPrefs.SetInt(PREF_SL_FILTER_MODE, (int)_sectionOrganizer.GetFilterMode);
         }
@@ -256,7 +307,8 @@ namespace EnhancedConsole.Editor
         private void ForceClearLogs()
         {
             ClearUnityConsole();
-            logManager.Clear();
+            // Like Unity's Clear, compiler errors stay until the code compiles.
+            logManager.ClearKeepingCompilerErrors();
             _selectedIndex = -1;
             _selectedEntry = null;
             _multiSelectedIndices.Clear();
@@ -322,6 +374,9 @@ namespace EnhancedConsole.Editor
 
         private void OnEditorUpdate()
         {
+            SyncThreadSafeClock();
+            DrainPendingLogs();
+
             if (!_repaintPending)
                 return;
 
@@ -337,7 +392,30 @@ namespace EnhancedConsole.Editor
         private void OnCompilationStarted(object context)
         {
             if (_clearOnRecompile)
-                logManager.Clear();
+                logManager.ClearKeepingCompilerErrors();
+
+            logManager.BeginCompilation();
+        }
+
+        // Compiler results come straight from the compilation pipeline, so they're listed whether or
+        // not Unity also sends them to Application.logMessageReceived. Each assembly's results replace
+        // its previous ones.
+        private void OnAssemblyCompilationFinished(string assemblyPath, CompilerMessage[] messages)
+        {
+            List<(string message, LogType type)> results = new(messages?.Length ?? 0);
+            if (messages != null)
+            {
+                foreach (CompilerMessage compilerMessage in messages)
+                {
+                    if (compilerMessage.type == CompilerMessageType.Error)
+                        results.Add((compilerMessage.message, LogType.Error));
+                    else if (compilerMessage.type == CompilerMessageType.Warning)
+                        results.Add((compilerMessage.message, LogType.Warning));
+                }
+            }
+
+            logManager.SetCompilerMessages(assemblyPath, results);
+            _repaintPending = true;
         }
 
         private void OnCompilationFinished(object context)
@@ -355,14 +433,86 @@ namespace EnhancedConsole.Editor
 
 
 
+        // Called on whichever thread logged.
         private void HandleLog(string message, string stackTrace, LogType type)
         {
             // The context handler runs just before this callback on the same thread.
             int contextInstanceId = LogContextHelper.ConsumeLogContextInstanceId();
-            logManager.AddLog(message, stackTrace, type, contextInstanceId);
+
+            if (Thread.CurrentThread.ManagedThreadId == _mainThreadId)
+            {
+                // Keep order: add anything queued from other threads first.
+                DrainPendingLogs();
+                logManager.AddLog(message, stackTrace, type, contextInstanceId);
+                OnLogAdded(type);
+                return;
+            }
+
+            // Unity APIs such as Time can't be read here, so times come from a thread-safe clock
+            // that the main thread keeps in step with Time.realtimeSinceStartup.
+            _pendingLogs.Enqueue(new PendingLog(
+                message,
+                stackTrace,
+                type,
+                contextInstanceId,
+                (float)(threadSafeClock.Elapsed.TotalSeconds + _realtimeOffset),
+                DateTime.Now.Ticks,
+                _lastFrameCount));
             _repaintPending = true;
         }
 
+        private void DrainPendingLogs()
+        {
+            if (logManager == null)
+                return;
+
+            while (_pendingLogs.TryDequeue(out PendingLog log))
+            {
+                logManager.AddLog(log.Message, log.StackTrace, log.Type, log.ContextInstanceId,
+                    log.RealtimeSinceStartup, log.WallClockTicks, log.FrameCount);
+                OnLogAdded(log.Type);
+            }
+        }
+
+        private void OnLogAdded(LogType type)
+        {
+            _repaintPending = true;
+
+            // Like Unity's Error Pause: errors, exceptions and failed asserts pause Play Mode.
+            if (_errorPause && type is (LogType.Error or LogType.Exception or LogType.Assert) &&
+                EditorApplication.isPlaying && !EditorApplication.isPaused)
+                EditorApplication.isPaused = true;
+        }
+
+        // Main thread only.
+        private void SyncThreadSafeClock()
+        {
+            _realtimeOffset = Time.realtimeSinceStartupAsDouble - threadSafeClock.Elapsed.TotalSeconds;
+            _lastFrameCount = Time.frameCount;
+        }
+
+        private readonly struct PendingLog
+        {
+            public readonly string Message;
+            public readonly string StackTrace;
+            public readonly LogType Type;
+            public readonly int ContextInstanceId;
+            public readonly float RealtimeSinceStartup;
+            public readonly long WallClockTicks;
+            public readonly int FrameCount;
+
+            public PendingLog(string message, string stackTrace, LogType type, int contextInstanceId,
+                float realtimeSinceStartup, long wallClockTicks, int frameCount)
+            {
+                Message = message;
+                StackTrace = stackTrace;
+                Type = type;
+                ContextInstanceId = contextInstanceId;
+                RealtimeSinceStartup = realtimeSinceStartup;
+                WallClockTicks = wallClockTicks;
+                FrameCount = frameCount;
+            }
+        }
 
         private void OnGUI()
         {
@@ -379,6 +529,7 @@ namespace EnhancedConsole.Editor
                 }
 
                 HandleWindowFocus();
+                HandleFindCommand();
 
                 DrawToolbar();
                 DrawLogList();
@@ -432,8 +583,10 @@ namespace EnhancedConsole.Editor
             DrawClearOptionsMenu();
             DrawCollapseToggle();
             DrawCollapseOptionsMenu();
+            DrawErrorPauseToggle();
             DrawStackTraceToggle();
             DrawTimeToggle();
+            DrawTimeOptionsMenu();
 
             if (!Application.isPlaying)
             {
@@ -552,6 +705,110 @@ namespace EnhancedConsole.Editor
             GUI.backgroundColor = originalColor;
         }
 
+        private void DrawTimeOptionsMenu()
+        {
+            Rect dropdownRect = GUILayoutUtility.GetRect(new GUIContent("▼"), EditorStyles.toolbarDropDown, GUILayout.Width(15));
+            if (GUI.Button(dropdownRect, "▼", EditorStyles.toolbarDropDown))
+            {
+                GenericMenu menu = new();
+                AddTimeModeItems(menu, "");
+                menu.DropDown(dropdownRect);
+            }
+        }
+
+        private void AddTimeModeItems(GenericMenu menu, string prefix)
+        {
+            menu.AddItem(new GUIContent(prefix + "Since Startup"), _timeDisplayMode == TimeDisplayMode.SinceStartup, () => SetTimeDisplayMode(TimeDisplayMode.SinceStartup));
+            menu.AddItem(new GUIContent(prefix + "Wall Clock"), _timeDisplayMode == TimeDisplayMode.WallClock, () => SetTimeDisplayMode(TimeDisplayMode.WallClock));
+            menu.AddItem(new GUIContent(prefix + "Frame"), _timeDisplayMode == TimeDisplayMode.Frame, () => SetTimeDisplayMode(TimeDisplayMode.Frame));
+        }
+
+        private void SetTimeDisplayMode(TimeDisplayMode mode)
+        {
+            _timeDisplayMode = mode;
+            _timeColumnWidth = -1f;
+            // Picking a time mode implies wanting to see it.
+            _showTime = true;
+            SavePreferences();
+            Repaint();
+        }
+
+        private void DrawErrorPauseToggle()
+        {
+            Color originalColor = GUI.backgroundColor;
+            GUI.backgroundColor = _errorPause ? _colorScheme.ToggleButtonActive : Color.white;
+            bool newErrorPause = GUILayout.Toggle(_errorPause,
+                new GUIContent("Error Pause", "Pause Play Mode when an error, exception or failed assert is logged"),
+                EditorStyles.toolbarButton, GUILayout.Width(80));
+            if (newErrorPause != _errorPause)
+            {
+                _errorPause = newErrorPause;
+                SavePreferences();
+            }
+            GUI.backgroundColor = originalColor;
+        }
+
+        // Items in the window's ⋮ menu, like Unity's Console.
+        public void AddItemsToMenu(GenericMenu menu)
+        {
+            for (int lines = 1; lines <= MAX_LOG_ENTRY_LINES; lines++)
+            {
+                int value = lines;
+                menu.AddItem(new GUIContent($"Log Entry/{lines} {(lines == 1 ? "Line" : "Lines")}"), _logEntryLines == lines, () => SetLogEntryLines(value));
+            }
+
+            AddTimeModeItems(menu, "Time/");
+            menu.AddItem(new GUIContent("Use Monospace Font"), _useMonospaceFont, ToggleMonospaceFont);
+            menu.AddItem(new GUIContent("Rich Text"), _richText, ToggleRichText);
+        }
+
+        private void SetLogEntryLines(int lines)
+        {
+            _logEntryLines = Mathf.Clamp(lines, 1, MAX_LOG_ENTRY_LINES);
+            SavePreferences();
+            UpdateRowMetrics();
+            _scrollToSelection = true;
+            Repaint();
+        }
+
+        private void ToggleMonospaceFont()
+        {
+            _useMonospaceFont = !_useMonospaceFont;
+            SavePreferences();
+            _isStylesInitialized = false;
+            Repaint();
+        }
+
+        private void ToggleRichText()
+        {
+            _richText = !_richText;
+            SavePreferences();
+            _isStylesInitialized = false;
+            Repaint();
+        }
+
+        private void UpdateRowMetrics()
+        {
+            float lineHeight = _logMessageStyle != null && _logMessageStyle.lineHeight > 0f
+                ? _logMessageStyle.lineHeight
+                : EditorGUIUtility.singleLineHeight;
+
+            _rowHeight = Mathf.Max(MIN_ROW_HEIGHT, Mathf.Ceil(_logEntryLines * lineHeight) + 10f);
+        }
+
+        private static Font GetMonospaceFont()
+        {
+            if (monospaceFont != null)
+                return monospaceFont;
+
+            // The font Unity's own Console uses for its monospace option, with OS fonts as a fallback.
+            monospaceFont = EditorGUIUtility.Load("Fonts/RobotoMono/RobotoMono-Regular.ttf") as Font;
+            if (monospaceFont == null)
+                monospaceFont = Font.CreateDynamicFontFromOSFont(new[] { "Menlo", "Consolas", "DejaVu Sans Mono", "Courier New" }, 12);
+
+            return monospaceFont;
+        }
+
         private void DrawForceRecompileButton()
         {
             string buttonLabel = _recompileWithAssetRefresh ? "Recompile + Asset Refresh" : "Recompile";
@@ -625,7 +882,8 @@ namespace EnhancedConsole.Editor
 
         private void DrawSearchField()
         {
-            GUILayout.Label("Search:", EditorStyles.miniLabel, GUILayout.Width(60));
+            GUILayout.Label(new GUIContent("Search:", "Ctrl+F or Cmd+F"), EditorStyles.miniLabel, GUILayout.Width(60));
+            GUI.SetNextControlName(SEARCH_CONTROL_NAME);
             string newSearch = EditorGUILayout.TextField(_filterManager.GetSearchFilter(), EditorStyles.toolbarSearchField, GUILayout.Width(200));
             if (newSearch != _filterManager.GetSearchFilter())
                 _filterManager.SetSearchFilter(newSearch);
@@ -789,19 +1047,40 @@ namespace EnhancedConsole.Editor
             float availableHeight = _showStackTrace
                 ? position.height - TOOLBAR_HEIGHT - _detailsHeight - 10
                 : position.height - TOOLBAR_HEIGHT - 10;
-            float totalContentHeight = Mathf.Max(filteredLogs.Count * LOG_ENTRY_HEIGHT, minLogListHeight);
+            float totalContentHeight = Mathf.Max(filteredLogs.Count * _rowHeight, minLogListHeight);
             float constrainedHeight = Mathf.Min(availableHeight, totalContentHeight);
 
             Rect scrollViewRect = GUILayoutUtility.GetRect(0, constrainedHeight, GUILayout.ExpandWidth(true));
-            float contentHeight = filteredLogs.Count * LOG_ENTRY_HEIGHT;
+            float contentHeight = filteredLogs.Count * _rowHeight;
+
+            // During Layout, GetRect returns a placeholder rect, so the height from the last real event is used.
+            bool hasRealRect = Event.current.type != EventType.Layout;
+            float viewHeight = hasRealRect ? scrollViewRect.height : _visibleListHeight;
+            float maxScroll = Mathf.Max(0f, contentHeight - viewHeight);
+
+            if (hasRealRect)
+            {
+                _visibleListHeight = scrollViewRect.height;
+
+                if (_scrollToSelection)
+                {
+                    _scrollToSelection = false;
+                    ScrollSelectionIntoView(scrollViewRect.height);
+                }
+                else if (_followNewest)
+                {
+                    // Autoscroll: while the list is at the bottom, new logs keep it there.
+                    _scrollPosition.y = maxScroll;
+                }
+            }
 
             try
             {
                 _scrollPosition = GUI.BeginScrollView(scrollViewRect, _scrollPosition,
                     new Rect(0, 0, scrollViewRect.width - 20, contentHeight));
 
-                int firstVisibleIndex = Mathf.Max(0, Mathf.FloorToInt(_scrollPosition.y / LOG_ENTRY_HEIGHT));
-                int visibleRowCount = Mathf.CeilToInt(scrollViewRect.height / LOG_ENTRY_HEIGHT) + 1;
+                int firstVisibleIndex = Mathf.Max(0, Mathf.FloorToInt(_scrollPosition.y / _rowHeight));
+                int visibleRowCount = Mathf.CeilToInt(scrollViewRect.height / _rowHeight) + 1;
                 int lastVisibleIndex = Mathf.Min(filteredLogs.Count - 1, firstVisibleIndex + visibleRowCount);
 
                 for (int i = firstVisibleIndex; i <= lastVisibleIndex; i++)
@@ -812,6 +1091,13 @@ namespace EnhancedConsole.Editor
                 GUI.EndScrollView();
             }
 
+            // Scrolling up stops following new logs; scrolling back to the bottom resumes it.
+            // This must run on Layout too: the scroll view applies mouse wheel and trackpad scrolling
+            // in the event after the scroll, which is usually Layout. Skipping it there let the next
+            // Repaint snap the list back to the bottom, so the wheel seemed not to work.
+            if (viewHeight > 0f)
+                _followNewest = _scrollPosition.y >= maxScroll - 1f;
+
             HandleLogListInput(filteredLogs);
 
             _selectedEntry = _selectedIndex >= 0 && _selectedIndex < filteredLogs.Count
@@ -819,10 +1105,24 @@ namespace EnhancedConsole.Editor
                 : null;
         }
 
+        private void ScrollSelectionIntoView(float viewHeight)
+        {
+            if (_selectedIndex < 0)
+                return;
+
+            float rowTop = _selectedIndex * _rowHeight;
+            float rowBottom = rowTop + _rowHeight;
+
+            if (rowTop < _scrollPosition.y)
+                _scrollPosition.y = rowTop;
+            else if (rowBottom > _scrollPosition.y + viewHeight)
+                _scrollPosition.y = rowBottom - viewHeight;
+        }
+
         private void DrawLogListEntry(List<LogEntry> filteredLogs, int i, Rect scrollViewRect)
         {
             LogEntry log = filteredLogs[i];
-            Rect entryRect = new(0, i * LOG_ENTRY_HEIGHT, scrollViewRect.width - 20, LOG_ENTRY_HEIGHT);
+            Rect entryRect = new(0, i * _rowHeight, scrollViewRect.width - 20, _rowHeight);
 
             Color backgroundColor = _selectedIndex == i || _multiSelectedIndices.Contains(i)
                 ? _colorScheme.SelectedRowBackground
@@ -843,13 +1143,13 @@ namespace EnhancedConsole.Editor
             if (section == null)
                 return;
 
-            Rect bubbleRect = new(entryRect.x + 2, entryRect.y + 10, 8, 12);
+            Rect bubbleRect = new(entryRect.x + 2, entryRect.y + (_rowHeight - 12f) * 0.5f, 8, 12);
             EditorGUI.DrawRect(bubbleRect, section.color);
         }
 
         private void DrawLogIcon(Rect entryRect, LogEntry log)
         {
-            Rect iconRect = new(entryRect.x + 15, entryRect.y + 8, 16, 16);
+            Rect iconRect = new(entryRect.x + 15, entryRect.y + (_rowHeight - 16f) * 0.5f, 16, 16);
             GUI.DrawTexture(iconRect, LogEntryFormatter.GetIconForLogType(log.Type));
         }
 
@@ -858,12 +1158,69 @@ namespace EnhancedConsole.Editor
             float textStartX = entryRect.x + 15 + 16 + 5;
             float rightPadding = 5f;
             float countCircleSize = 20f;
-            float timeWidth = _showTime ? 60f : 0f;
+            float timeWidth = _showTime ? GetTimeColumnWidth() : 0f;
             float availableTextWidth = entryRect.width - textStartX - rightPadding - countCircleSize - timeWidth;
 
-            Rect textRect = new(textStartX, entryRect.y + 2, availableTextWidth, LOG_ENTRY_HEIGHT);
+            Rect textRect = new(textStartX, entryRect.y, availableTextWidth, _rowHeight);
 
-            GUI.Label(textRect, log.DisplayText, _logMessageStyle);
+            string displayText = log.GetDisplayText(_logEntryLines);
+            DrawSearchHighlight(textRect, displayText);
+            GUI.Label(textRect, displayText, _logMessageStyle);
+        }
+
+        /// <summary>Highlights the first search match in the row's visible text, behind the label.</summary>
+        private void DrawSearchHighlight(Rect textRect, string displayText)
+        {
+            if (Event.current.type != EventType.Repaint)
+                return;
+
+            string search = _filterManager.GetSearchFilter();
+            if (string.IsNullOrEmpty(search) || string.IsNullOrEmpty(displayText))
+                return;
+
+            // Rich text tags take no space when drawn, so positions inside tagged text can't be measured
+            // from the raw string.
+            if (_richText && displayText.IndexOf('<') >= 0)
+                return;
+
+            int index = displayText.IndexOf(search, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+                return;
+
+            int lineStart = index > 0 ? displayText.LastIndexOf('\n', index - 1) + 1 : 0;
+            int lineIndex = 0;
+            int lineCount = 1;
+            for (int i = 0; i < displayText.Length; i++)
+            {
+                if (displayText[i] != '\n')
+                    continue;
+
+                lineCount++;
+                if (i < index)
+                    lineIndex++;
+            }
+
+            GUIStyle style = _logMessageStyle;
+            float lineHeight = style.lineHeight;
+            float blockTop = textRect.y + style.padding.top +
+                             (textRect.height - style.padding.vertical - lineCount * lineHeight) * 0.5f;
+
+            float x = textRect.x + style.padding.left + MeasureTextWidth(displayText.Substring(lineStart, index - lineStart));
+            if (x >= textRect.xMax)
+                return;
+
+            float width = MeasureTextWidth(displayText.Substring(index, search.Length));
+            Rect highlightRect = new(x, blockTop + lineIndex * lineHeight, Mathf.Min(width, textRect.xMax - x), lineHeight);
+            EditorGUI.DrawRect(highlightRect, _colorScheme.SearchHighlight);
+        }
+
+        private float MeasureTextWidth(string text)
+        {
+            if (text.Length == 0)
+                return 0f;
+
+            _measureContent.text = text;
+            return _logMessageStyle.CalcSize(_measureContent).x - _logMessageStyle.padding.horizontal;
         }
 
         private void DrawLogTime(Rect entryRect, LogEntry log)
@@ -871,10 +1228,18 @@ namespace EnhancedConsole.Editor
             if (!_showTime)
                 return;
 
-            float timeWidth = 60f;
-            Rect timeRect = new(entryRect.xMax - 5 - 20 - timeWidth, entryRect.y + 2, timeWidth - 5, LOG_ENTRY_HEIGHT);
+            float timeWidth = GetTimeColumnWidth();
+            Rect timeRect = new(entryRect.xMax - 5 - 20 - timeWidth, entryRect.y, timeWidth - 5, _rowHeight);
 
-            GUI.Label(timeRect, log.TimeText, _logTimeStyle);
+            GUI.Label(timeRect, log.GetTimeText(_timeDisplayMode), _logTimeStyle);
+        }
+
+        private float GetTimeColumnWidth()
+        {
+            if (_timeColumnWidth < 0f)
+                _timeColumnWidth = _logTimeStyle.CalcSize(new GUIContent(LogEntryFormatter.GetTimeSample(_timeDisplayMode))).x + 10f;
+
+            return _timeColumnWidth;
         }
 
         private void DrawCollapseCount(Rect entryRect, LogEntry log, int index)
@@ -883,7 +1248,7 @@ namespace EnhancedConsole.Editor
                 return;
 
             float countCircleSize = 20f;
-            Rect circleRect = new(entryRect.xMax - 5 - countCircleSize, entryRect.y + (LOG_ENTRY_HEIGHT - countCircleSize) * 0.5f, countCircleSize, countCircleSize);
+            Rect circleRect = new(entryRect.xMax - 5 - countCircleSize, entryRect.y + (_rowHeight - countCircleSize) * 0.5f, countCircleSize, countCircleSize);
 
             Color circleColor = _selectedIndex == index
                 ? _colorScheme.SelectedCountCircle
@@ -899,8 +1264,55 @@ namespace EnhancedConsole.Editor
             Event e = Event.current;
 
             HandleMouseInput(e, filteredLogs);
+
+            // Keys typed into the search field belong to the search field.
+            if (EditorGUIUtility.editingTextField)
+                return;
+
             HandleKeyboardShortcuts(e, filteredLogs);
-            HandleArrowKeyNavigation(e, filteredLogs);
+            HandleDeleteInput(e, filteredLogs);
+            HandleKeyboardNavigation(e, filteredLogs);
+        }
+
+        /// <summary>
+        /// Delete (Backspace or Fn+Delete on a Mac keyboard) removes the selected logs and clears the selection.
+        /// Edit > Delete arrives as a SoftDelete or Delete command and does the same.
+        /// </summary>
+        private void HandleDeleteInput(Event e, List<LogEntry> filteredLogs)
+        {
+            bool isDeleteKey = e.type == EventType.KeyDown && e.keyCode is KeyCode.Delete or KeyCode.Backspace;
+            bool isDeleteCommand = e.type is EventType.ValidateCommand or EventType.ExecuteCommand &&
+                                   e.commandName is "SoftDelete" or "Delete";
+            if (!isDeleteKey && !isDeleteCommand)
+                return;
+
+            if (_selectedIndex < 0 && _multiSelectedIndices.Count == 0)
+                return;
+
+            // Validating only tells Unity the command is handled here, so it sends ExecuteCommand.
+            if (e.type != EventType.ValidateCommand)
+                DeleteSelectedEntries(filteredLogs);
+
+            e.Use();
+        }
+
+        private void DeleteSelectedEntries(List<LogEntry> filteredLogs)
+        {
+            List<LogEntry> toRemove = new(_multiSelectedIndices.Count + 1);
+            if (_selectedIndex >= 0 && _selectedIndex < filteredLogs.Count)
+                toRemove.Add(filteredLogs[_selectedIndex]);
+
+            foreach (int index in _multiSelectedIndices)
+            {
+                if (index >= 0 && index < filteredLogs.Count && index != _selectedIndex)
+                    toRemove.Add(filteredLogs[index]);
+            }
+
+            logManager.RemoveEntries(toRemove);
+            _selectedIndex = -1;
+            _selectedEntry = null;
+            _multiSelectedIndices.Clear();
+            Repaint();
         }
 
         private void HandleMouseInput(Event e, List<LogEntry> filteredLogs)
@@ -912,7 +1324,7 @@ namespace EnhancedConsole.Editor
             if (!scrollArea.Contains(e.mousePosition))
                 return;
 
-            int clickedIndex = (int)((e.mousePosition.y - scrollArea.y + _scrollPosition.y) / LOG_ENTRY_HEIGHT);
+            int clickedIndex = (int)((e.mousePosition.y - scrollArea.y + _scrollPosition.y) / _rowHeight);
             if (clickedIndex < 0 || clickedIndex >= filteredLogs.Count)
                 return;
 
@@ -940,6 +1352,11 @@ namespace EnhancedConsole.Editor
                 CopySelectedEntries(filteredLogs);
                 e.Use();
             }
+            else if (e.keyCode == KeyCode.F)
+            {
+                FocusSearchField();
+                e.Use();
+            }
         }
 
         private void SelectAllLogs(List<LogEntry> filteredLogs, Event e)
@@ -952,23 +1369,96 @@ namespace EnhancedConsole.Editor
             Repaint();
         }
 
-        private void HandleArrowKeyNavigation(Event e, List<LogEntry> filteredLogs)
+        /// <summary>
+        /// Up/Down, Page Up/Page Down, Home/End move the selection (Shift extends it) and keep it in view.
+        /// Enter or Return opens the selected log's source.
+        /// </summary>
+        private void HandleKeyboardNavigation(Event e, List<LogEntry> filteredLogs)
         {
             if (e.type != EventType.KeyDown || filteredLogs.Count == 0)
                 return;
 
-            if (e.keyCode == KeyCode.UpArrow && _selectedIndex > 0)
+            if (e.keyCode is KeyCode.Return or KeyCode.KeypadEnter)
             {
-                _selectedIndex--;
-                _multiSelectedIndices.Clear();
-                e.Use();
+                if (_selectedIndex >= 0 && _selectedIndex < filteredLogs.Count)
+                {
+                    OpenScriptAtLogLocation(filteredLogs[_selectedIndex]);
+                    e.Use();
+                }
+
+                return;
             }
-            else if (e.keyCode == KeyCode.DownArrow && _selectedIndex < filteredLogs.Count - 1)
+
+            int lastIndex = filteredLogs.Count - 1;
+            int pageSize = Mathf.Max(1, Mathf.FloorToInt(_visibleListHeight / _rowHeight) - 1);
+            int current = _selectedIndex;
+            int target;
+
+            switch (e.keyCode)
             {
-                _selectedIndex++;
-                _multiSelectedIndices.Clear();
-                e.Use();
+                case KeyCode.UpArrow:
+                    target = current < 0 ? lastIndex : current - 1;
+                    break;
+                case KeyCode.DownArrow:
+                    target = current < 0 ? 0 : current + 1;
+                    break;
+                case KeyCode.PageUp:
+                    target = current < 0 ? lastIndex : current - pageSize;
+                    break;
+                case KeyCode.PageDown:
+                    target = current < 0 ? 0 : current + pageSize;
+                    break;
+                case KeyCode.Home:
+                    target = 0;
+                    break;
+                case KeyCode.End:
+                    target = lastIndex;
+                    break;
+                default:
+                    return;
             }
+
+            target = Mathf.Clamp(target, 0, lastIndex);
+            e.Use();
+
+            if (target == current)
+                return;
+
+            if (e.shift && current >= 0)
+            {
+                // Extend the selection over every row passed, like Shift-click.
+                int from = Mathf.Min(current, target);
+                int to = Mathf.Max(current, target);
+                for (int i = from; i <= to; i++)
+                    _multiSelectedIndices.Add(i);
+            }
+            else
+            {
+                _multiSelectedIndices.Clear();
+            }
+
+            _selectedIndex = target;
+            _scrollToSelection = true;
+            Repaint();
+        }
+
+        private void FocusSearchField()
+        {
+            EditorGUI.FocusTextInControl(SEARCH_CONTROL_NAME);
+            Repaint();
+        }
+
+        /// <summary>Edit > Find (Ctrl+F or Cmd+F) arrives as a command when the window has focus.</summary>
+        private void HandleFindCommand()
+        {
+            Event e = Event.current;
+            if (e.type is not (EventType.ValidateCommand or EventType.ExecuteCommand) || e.commandName != "Find")
+                return;
+
+            if (e.type == EventType.ExecuteCommand)
+                FocusSearchField();
+
+            e.Use();
         }
 
         private void HandleLogEntrySelection(int index, Event currentEvent)
@@ -1115,7 +1605,7 @@ namespace EnhancedConsole.Editor
                 padding = new RectOffset(4, 4, 2, 2),
                 fontSize = 11,
                 wordWrap = false,
-                richText = true
+                richText = _richText
             };
         }
 
@@ -1132,8 +1622,10 @@ namespace EnhancedConsole.Editor
         {
             _logMessageStyle = new GUIStyle(EditorStyles.label)
             {
-                richText = true,
-                wordWrap = false
+                richText = _richText,
+                wordWrap = false,
+                clipping = TextClipping.Clip,
+                alignment = TextAnchor.MiddleLeft
             };
             _logMessageStyle.normal.textColor = _colorScheme.TextDefault;
 
@@ -1151,7 +1643,17 @@ namespace EnhancedConsole.Editor
             _logCountStyle.normal.textColor = _colorScheme.CountCircleText;
 
             _stackTraceLineStyle = CreateStackTraceLineStyle();
+
+            if (_useMonospaceFont)
+            {
+                Font font = GetMonospaceFont();
+                _logMessageStyle.font = font;
+                _stackTraceLineStyle.font = font;
+            }
+
             _stackTraceLineClickableStyle = CreateStackTraceLineStyleClickable(_stackTraceLineStyle);
+            _timeColumnWidth = -1f;
+            UpdateRowMetrics();
         }
 
         private void DrawResizeHandle()

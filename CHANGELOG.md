@@ -4,6 +4,23 @@ All notable changes to this package are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- The time column can show time since startup, wall-clock time or frame number. Choose with the arrow beside **Time** or the window's ⋮ menu. Logs now store their wall-clock time and frame.
+- **Error Pause** pauses Play Mode when an error, exception or failed assert is logged.
+- Display options in the window's ⋮ menu: 1 to 10 lines per log, a monospace font, and turning rich text off.
+- Keyboard navigation: Page Up/Down and Home/End move the selection, Shift extends it, and the selection stays in view. Enter or Return opens the selected log's source. Ctrl+F or Cmd+F focuses the search field.
+- Delete (Backspace on a Mac) or Edit > Delete removes the selected logs from Enhanced Console and clears the selection. In Collapse mode it removes every log in the selected groups.
+- Autoscroll: while the list is scrolled to the bottom, it follows new logs. Scrolling up stops it, and scrolling back down resumes it.
+- The first search match in each log is highlighted, except in messages with rich text tags.
+- Logs from background threads, through `Application.logMessageReceivedThreaded`. They keep the time they were written.
+- Compiler errors and warnings are read from the compilation pipeline, so they appear even if they never reach the log callback. Like Unity's Console, **Clear** keeps compiler errors until their assembly compiles.
+
+### Documentation
+
+- Rechecked the Unity's Console comparison against the Unity 6 manual. Unity's Console has timestamps, lines per log, a monospace font and Error Pause, and keeps compiler errors after Clear.
+- Added a comparison with Editor Console Pro, Debug.Log Extensions, Rider's Unity log view and runtime consoles.
+
 ### Changed
 
 - Faster with many logs. The filtered list is cached and only new logs are filtered, instead of copying and filtering every log several times per repaint. Collapse uses a lookup table instead of a linear search, so turning it on with 10,000 logs no longer freezes the Editor.
@@ -19,7 +36,7 @@ All notable changes to this package are documented in this file.
 
 - A section with an empty name matched every log.
 - The selection jumped to a different log when a filter changed, Collapse was toggled or old logs were pruned. The selected log is found again instead, and multi-selection is cleared.
-- `Debug.Log(message, component)` from a background thread threw an exception, because the context handler read `component.gameObject` off the main thread.
+- `Debug.Log(message, context)` from a background thread threw an exception, because the context handler read the context object off the main thread. The context is now read only for main-thread logs.
 - A context logged on a background thread could attach to the next main-thread log.
 - Errors in the window's GUI were drawn as a help box that broke the layout and repeated on every repaint. They're now logged once.
 - The **Time** toggle saved preferences whenever any control changed, such as while typing a search.

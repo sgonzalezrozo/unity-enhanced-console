@@ -132,6 +132,16 @@ namespace EnhancedConsole.Editor
 		public Color ClearButtonBlocked => new(1f, 0.5f, 0.5f, 0.7f);
 
 		public Color DisabledUIElement => new(0.5f, 0.5f, 0.5f, 0.5f);
+
+		public Color SearchHighlight
+		{
+			get
+			{
+				return isDarkTheme
+					? new Color(1f, 0.82f, 0.2f, 0.35f)
+					: new Color(1f, 0.75f, 0f, 0.45f);
+			}
+		}
 	}
 }
 #endif

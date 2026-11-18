@@ -29,12 +29,13 @@ namespace EnhancedConsole.Editor
             defaultLogHandler.LogException(exception, context);
         }
 
-        // Runs on whatever thread logged. Only the instance ID is read here: Component.gameObject and
-        // Unity's overloaded null check are main-thread APIs, and calling them from a worker thread would
-        // make that thread's Debug.Log throw. The ID is resolved to a GameObject later, on the main thread.
+        // Runs on whatever thread logged. GetInstanceID, Component.gameObject and Unity's overloaded null
+        // check all require the main thread, and calling them from a worker thread would make that
+        // thread's Debug.Log throw. So the context is only captured for main-thread logs, and the ID is
+        // resolved to a GameObject later.
         private static void CaptureContext(Object context)
         {
-            if (ReferenceEquals(context, null))
+            if (ReferenceEquals(context, null) || !LogContextHelper.IsMainThread)
                 return;
 
             LogContextHelper.SetLastLogContextInstanceId(context.GetInstanceID());
@@ -44,6 +45,7 @@ namespace EnhancedConsole.Editor
     public static class LogContextHelper
     {
         private static bool isInitialized;
+        private static int mainThreadId = -1;
 
         // Per thread, so a context logged on a worker thread can't attach to the next main-thread log.
         [ThreadStatic] private static int lastLoggedContextInstanceId;
@@ -53,9 +55,13 @@ namespace EnhancedConsole.Editor
             if (isInitialized)
                 return;
 
+            // Initialize is called from the Editor's main thread.
+            mainThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
             Debug.unityLogger.logHandler = new LogContextHandler();
             isInitialized = true;
         }
+
+        internal static bool IsMainThread => System.Threading.Thread.CurrentThread.ManagedThreadId == mainThreadId;
 
         internal static void SetLastLogContextInstanceId(int instanceId)
         {

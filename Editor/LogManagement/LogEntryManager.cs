@@ -26,6 +26,11 @@ namespace EnhancedConsole.Editor.LogManagement
         private readonly int[] allCounts = new int[3];
         private readonly int[] collapsedCounts = new int[3];
 
+        // Texts of the current compiler messages, so the same message arriving through
+        // Application.logMessageReceived isn't listed twice.
+        private readonly HashSet<string> compilerMessageTexts = new();
+        private int compilationStartIndex = -1;
+
         private bool builtCollapsed;
         private bool builtExactStacktrace;
 
@@ -34,6 +39,8 @@ namespace EnhancedConsole.Editor.LogManagement
 
         /// <summary>Time source for new entries. Replaceable so the storage logic can be tested outside Unity.</summary>
         internal static Func<float> Clock = () => Time.realtimeSinceStartup;
+
+        internal static Func<int> FrameCounter = () => Time.frameCount;
 
         private readonly List<LogEntry> filteredEntries = new();
         private int filteredStructureVersion;
@@ -73,20 +80,167 @@ namespace EnhancedConsole.Editor.LogManagement
 
         public void AddLog(string message, string stackTrace, LogType type, int contextGameObjectInstanceId)
         {
+            AddLog(message, stackTrace, type, contextGameObjectInstanceId, Clock(), DateTime.Now.Ticks, FrameCounter());
+        }
+
+        /// <summary>
+        /// Adds a log with times captured when it was written, such as a log from a background thread
+        /// that's added later on the main thread. Main thread only.
+        /// </summary>
+        public void AddLog(string message, string stackTrace, LogType type, int contextGameObjectInstanceId,
+            float realtimeSinceStartup, long wallClockTicks, int frameCount)
+        {
+            if (compilerMessageTexts.Count > 0 && message != null && compilerMessageTexts.Contains(message))
+                return;
+
+            LogEntry entry = CreateEntry(message, stackTrace, type, contextGameObjectInstanceId);
+            entry.RealtimeSinceStartup = realtimeSinceStartup;
+            entry.WallClockTicks = wallClockTicks;
+            entry.FrameCount = frameCount;
+            Append(entry);
+        }
+
+        /// <summary>Marks where a compilation started, so duplicates logged during it can be found.</summary>
+        public void BeginCompilation()
+        {
+            compilationStartIndex = allEntries.Count;
+        }
+
+        /// <summary>
+        /// Replaces the compiler messages of one assembly with the latest results. Messages logged
+        /// during this compilation with the same text are dropped, since this list replaces them.
+        /// </summary>
+        public void SetCompilerMessages(string assemblyPath, IReadOnlyList<(string message, LogType type)> messages)
+        {
+            if (string.IsNullOrEmpty(assemblyPath))
+                return;
+
+            HashSet<string> newTexts = new();
+            foreach ((string message, LogType _) in messages)
+            {
+                if (!string.IsNullOrEmpty(message))
+                    newTexts.Add(message);
+            }
+
+            int searchFrom = Math.Max(0, compilationStartIndex);
+            bool removedAny = false;
+            for (int i = allEntries.Count - 1; i >= 0; i--)
+            {
+                LogEntry entry = allEntries[i];
+                bool isOldResult = entry.CompilerAssembly == assemblyPath;
+                bool isDuplicate = !entry.IsCompilerMessage && i >= searchFrom && entry.Message != null && newTexts.Contains(entry.Message);
+                if (!isOldResult && !isDuplicate)
+                    continue;
+
+                allEntries.RemoveAt(i);
+                removedAny = true;
+            }
+
+            if (removedAny)
+                OnEntriesRemoved();
+
+            foreach ((string message, LogType type) in messages)
+            {
+                if (string.IsNullOrEmpty(message))
+                    continue;
+
+                LogEntry entry = CreateEntry(message, "", type, 0);
+                entry.CompilerAssembly = assemblyPath;
+                Append(entry);
+            }
+
+            RebuildCompilerMessageTexts();
+        }
+
+        /// <summary>Clears every log except compiler errors, which stay until the code compiles, like Unity's Console.</summary>
+        public void ClearKeepingCompilerErrors()
+        {
+            allEntries.RemoveAll(entry => !entry.IsCompilerError);
+            compilationStartIndex = -1;
+            OnEntriesRemoved();
+            RebuildCompilerMessageTexts();
+        }
+
+        /// <summary>
+        /// Removes logs picked from <see cref="Entries"/> or the filtered view. In collapse mode an entry
+        /// stands for its whole group, so every log in the group is removed.
+        /// </summary>
+        /// <returns>How many logs were removed.</returns>
+        public int RemoveEntries(IReadOnlyCollection<LogEntry> entries)
+        {
+            if (entries == null || entries.Count == 0)
+                return 0;
+
             EnsureCollapseMode();
 
-            LogEntry entry = new()
+            HashSet<LogEntry> exact = null;
+            HashSet<CollapseKey> groups = null;
+            if (builtCollapsed)
+            {
+                groups = new HashSet<CollapseKey>();
+                foreach (LogEntry entry in entries)
+                    groups.Add(new CollapseKey(entry, builtExactStacktrace));
+            }
+            else
+            {
+                exact = new HashSet<LogEntry>(entries);
+            }
+
+            int write = 0;
+            int removedBeforeCompilation = 0;
+            bool removedCompilerMessage = false;
+
+            for (int read = 0; read < allEntries.Count; read++)
+            {
+                LogEntry entry = allEntries[read];
+                bool remove = exact?.Contains(entry) ?? groups.Contains(new CollapseKey(entry, builtExactStacktrace));
+                if (!remove)
+                {
+                    allEntries[write++] = entry;
+                    continue;
+                }
+
+                if (read < compilationStartIndex)
+                    removedBeforeCompilation++;
+                removedCompilerMessage |= entry.IsCompilerMessage;
+            }
+
+            int removed = allEntries.Count - write;
+            if (removed == 0)
+                return 0;
+
+            allEntries.RemoveRange(write, removed);
+            if (compilationStartIndex >= 0)
+                compilationStartIndex -= removedBeforeCompilation;
+
+            OnEntriesRemoved();
+            if (removedCompilerMessage)
+                RebuildCompilerMessageTexts();
+
+            return removed;
+        }
+
+        private LogEntry CreateEntry(string message, string stackTrace, LogType type, int contextGameObjectInstanceId)
+        {
+            return new LogEntry()
             {
                 Message = message,
                 StackTrace = stackTrace,
                 Type = type,
                 RealtimeSinceStartup = Clock(),
+                WallClockTicks = DateTime.Now.Ticks,
+                FrameCount = FrameCounter(),
                 Count = 1,
                 ContextGameObjectInstanceId = contextGameObjectInstanceId
             };
+        }
+
+        private void Append(LogEntry entry)
+        {
+            EnsureCollapseMode();
 
             allEntries.Add(entry);
-            allCounts[LevelIndex(type)]++;
+            allCounts[LevelIndex(entry.Type)]++;
 
             if (builtCollapsed)
                 AddToCollapsed(entry);
@@ -102,6 +256,8 @@ namespace EnhancedConsole.Editor.LogManagement
             collapseGroups.Clear();
             Array.Clear(allCounts, 0, allCounts.Length);
             Array.Clear(collapsedCounts, 0, collapsedCounts.Length);
+            compilerMessageTexts.Clear();
+            compilationStartIndex = -1;
             structureVersion++;
         }
 
@@ -130,6 +286,7 @@ namespace EnhancedConsole.Editor.LogManagement
             }
 
             RebuildWithCollapse();
+            RebuildCompilerMessageTexts();
         }
 
         public void RebuildWithCollapse()
@@ -223,11 +380,33 @@ namespace EnhancedConsole.Editor.LogManagement
             }
 
             allEntries.RemoveRange(0, count);
+            if (compilationStartIndex >= 0)
+                compilationStartIndex = Math.Max(0, compilationStartIndex - count);
 
             if (builtCollapsed)
                 collapsedEntries.RemoveAll(group => group.Count <= 0);
 
             structureVersion++;
+        }
+
+        // Recounts and regroups after entries were removed from the middle of the list.
+        private void OnEntriesRemoved()
+        {
+            Array.Clear(allCounts, 0, allCounts.Length);
+            foreach (LogEntry entry in allEntries)
+                allCounts[LevelIndex(entry.Type)]++;
+
+            RebuildWithCollapse();
+        }
+
+        private void RebuildCompilerMessageTexts()
+        {
+            compilerMessageTexts.Clear();
+            foreach (LogEntry entry in allEntries)
+            {
+                if (entry.IsCompilerMessage && entry.Message != null)
+                    compilerMessageTexts.Add(entry.Message);
+            }
         }
 
         private static int LevelIndex(LogType type)
@@ -248,6 +427,9 @@ namespace EnhancedConsole.Editor.LogManagement
                 StackTrace = entry.StackTrace,
                 Type = entry.Type,
                 RealtimeSinceStartup = entry.RealtimeSinceStartup,
+                WallClockTicks = entry.WallClockTicks,
+                FrameCount = entry.FrameCount,
+                CompilerAssembly = entry.CompilerAssembly,
                 Count = 1,
                 ContextGameObjectInstanceId = entry.ContextGameObjectInstanceId
             };
