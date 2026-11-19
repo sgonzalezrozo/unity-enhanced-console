@@ -36,6 +36,9 @@ namespace EnhancedConsole.Editor
         private bool hadFocus = true;
         private bool guiErrorLogged;
         private string shownTitle;
+        private int titleTotal = -1;
+        private int titleFiltered = -1;
+        private bool titleIsPlaying;
 
         [MenuItem("Window/Enhanced Console")]
         public static void ShowWindow()
@@ -164,16 +167,32 @@ namespace EnhancedConsole.Editor
             context.Sections.RefreshSectionStates();
         }
 
+        // Runs on every GUI event, so the title is only formatted again when what it shows changed.
         private void UpdateTitle()
         {
-            string title = Application.isPlaying
-                ? $" Console | Total: {context.Logs.Entries.Count} - Filtered: {context.GetFilteredLogs().Count} "
-                : " Console  ";
+            bool isPlaying = Application.isPlaying;
+            int total = context.Logs.Entries.Count;
+            int filtered = context.GetFilteredLogs().Count;
+            if (IsTitleCurrent(isPlaying, total, filtered))
+                return;
+
+            titleIsPlaying = isPlaying;
+            titleTotal = total;
+            titleFiltered = filtered;
+            string title = isPlaying ? $" Console | Total: {total} - Filtered: {filtered} " : " Console  ";
             if (title == shownTitle)
                 return;
 
             shownTitle = title;
             titleContent = new GUIContent(title);
+        }
+
+        private bool IsTitleCurrent(bool isPlaying, int total, int filtered)
+        {
+            if (shownTitle == null || isPlaying != titleIsPlaying)
+                return false;
+
+            return !isPlaying || (total == titleTotal && filtered == titleFiltered);
         }
 
         private void OnEditorUpdate()

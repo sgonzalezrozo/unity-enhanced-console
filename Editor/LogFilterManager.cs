@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System;
 using UnityEngine;
 
 namespace EnhancedConsole.Editor
@@ -14,6 +15,10 @@ namespace EnhancedConsole.Editor
         private bool collapseEnabled = false;
         private bool collapseExactStacktrace = false;
         private int version = 1;
+
+        // The versions before and after the last search change that only narrowed the search (more text typed).
+        private int narrowedFromVersion = -1;
+        private int narrowedToVersion = -1;
 
         private readonly ConsoleSearchEngine searchEngine;
         private readonly SectionedLogOrganizer sectionOrganizer;
@@ -86,8 +91,22 @@ namespace EnhancedConsole.Editor
             if (filter == searchEngine.GetSearchFilter())
                 return;
 
+            string previous = searchEngine.GetSearchFilter();
+            int previousVersion = Version;
             searchEngine.SetSearchFilter(filter);
             version++;
+
+            // A log that contains the new text contains the old one too.
+            bool narrows = previous.Length > 0 && filter.IndexOf(previous, StringComparison.OrdinalIgnoreCase) >= 0;
+            narrowedFromVersion = narrows ? previousVersion : -1;
+            narrowedToVersion = narrows ? Version : -1;
+        }
+
+        // True when the only change since fromVersion narrowed the search, so the logs visible then are the only
+        // ones that can still match.
+        public bool IsNarrowedSince(int fromVersion)
+        {
+            return fromVersion == narrowedFromVersion && Version == narrowedToVersion;
         }
 
         public string GetSearchFilter()

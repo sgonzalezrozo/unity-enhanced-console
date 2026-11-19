@@ -42,15 +42,20 @@ namespace EnhancedConsole.Editor.LogManagement
         {
             HashSet<string> newTexts = CollectTexts(results);
             int searchFrom = Math.Max(0, CompilationStartIndex);
-            for (int i = allEntries.Count - 1; i >= 0; i--)
+
+            // One pass that moves the kept entries down, instead of a RemoveAt per entry that shifts the rest.
+            int kept = 0;
+            for (int i = 0; i < allEntries.Count; i++)
             {
                 LogEntry entry = allEntries[i];
                 bool isOldResult = entry.compilerAssembly == assemblyPath;
                 bool isDuplicate = i >= searchFrom && !entry.IsCompilerMessage && entry.message != null &&
                                    newTexts.Contains(entry.message);
-                if (isOldResult || isDuplicate)
-                    allEntries.RemoveAt(i);
+                if (!isOldResult && !isDuplicate)
+                    allEntries[kept++] = entry;
             }
+
+            allEntries.RemoveRange(kept, allEntries.Count - kept);
         }
 
         public void Rebuild(IReadOnlyList<LogEntry> allEntries)

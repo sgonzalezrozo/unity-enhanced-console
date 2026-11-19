@@ -34,6 +34,8 @@ namespace EnhancedConsole.Editor
         [NonSerialized] private int displayTextLines;
         [NonSerialized] private string timeText;
         [NonSerialized] private TimeDisplayMode timeTextMode;
+        [NonSerialized] private string countText;
+        [NonSerialized] private int countTextValue;
 
         // Section match cache. Valid while SectionMatchVersion equals SectionedLogOrganizer.MatchVersion.
         [NonSerialized] internal int sectionIndex;
@@ -59,6 +61,17 @@ namespace EnhancedConsole.Editor
             }
 
             return timeText;
+        }
+
+        internal string GetCountText()
+        {
+            if (countText == null || countTextValue != count)
+            {
+                countText = count.ToString();
+                countTextValue = count;
+            }
+
+            return countText;
         }
 
         internal static LogEntry FromCapturedLog(LogManagement.CapturedLog log)

@@ -92,7 +92,7 @@ namespace EnhancedConsole.Editor.Window.LogList
             float left = rowRect.width - RIGHT_PADDING - COUNT_CIRCLE_SIZE;
             Rect circleRect = CenterVertically(rowRect, left, COUNT_CIRCLE_SIZE_2D);
             EditorGUI.DrawRect(circleRect, GetCountCircleColor(index));
-            GUI.Label(circleRect, log.count.ToString(), context.Styles.Count);
+            GUI.Label(circleRect, log.GetCountText(), context.Styles.Count);
         }
 
         private Color GetCountCircleColor(int index)

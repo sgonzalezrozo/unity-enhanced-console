@@ -4,6 +4,19 @@ All notable changes to this package are documented in this file.
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-11-19
+
+### Changed
+
+- Typing in the search field is about 30 times faster with a full console. Each extra character used to search every log's message and stack trace again; now, when the new text contains the old one, only the logs still shown are checked. Typing 22 characters over 10,000 logs went from 2.3 s to 80 ms.
+- Searching every log, after deleting text or on the first character, is about twice as fast: the case-insensitive comparison folds ASCII directly instead of going through `IndexOf` with `OrdinalIgnoreCase`, with the same results. One search over 10,000 logs went from 157 ms to 81 ms.
+- New compiler results replace the old ones in one pass over the logs, instead of removing them one at a time.
+- The window title and the collapse counts are no longer rebuilt as new strings on every repaint.
+
+### Added
+
+- EditMode tests for search, the filtered view and compiler message replacement, with two search benchmarks that log their times. Add `com.sgonzalezrozo.enhanced-console` to `testables` in your manifest to run them.
+
 ## [0.3.6] - 2026-11-19
 
 ### Fixed
