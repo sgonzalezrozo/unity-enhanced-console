@@ -4,6 +4,12 @@ All notable changes to this package are documented in this file.
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-11-19
+
+### Changed
+
+- `package.json` lists the author's email, santiago.gonzalezrozo@outlook.com, next to the name and GitHub URL.
+
 ## [0.3.8] - 2026-11-19
 
 ### Documentation

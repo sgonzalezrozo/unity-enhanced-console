@@ -1,6 +1,6 @@
 {
   "name": "com.sgonzalezrozo.enhanced-console",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "displayName": "Enhanced Console",
   "description": "Unity Editor console window for noisy logs: section and regex filtering, search across messages and stack traces, log timestamps, Error Pause, keyboard navigation, and copying or deleting selected logs. Editor-only, no dependencies.",
   "documentationUrl": "https://github.com/sgonzalezrozo/unity-enhanced-console#readme",
@@ -10,6 +10,7 @@
   "license": "MIT",
   "author": {
     "name": "Santiago González Rozo",
+    "email": "santiago.gonzalezrozo@outlook.com",
     "url": "https://github.com/sgonzalezrozo"
   },
   "repository": {
