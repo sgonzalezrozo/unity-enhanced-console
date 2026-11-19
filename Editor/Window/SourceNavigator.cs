@@ -34,9 +34,28 @@ namespace EnhancedConsole.Editor.Window
                 OpenFile(openablePath, compilerLine);
         }
 
+        // Project paths (Assets/, Packages/) go through AssetDatabase.OpenAsset, like Unity's Project window, so the
+        // code editor gets the real file. Packages/ paths are virtual and don't exist on disk for most packages:
+        // Rider understands them, but VS Code opens an empty, unsaved buffer in place of the script.
         public void OpenFile(string filePath, int lineNumber)
         {
-            InternalEditorUtility.OpenFileAtLineExternal(filePath, lineNumber);
+            Object asset = AssetDatabase.LoadAssetAtPath<Object>(filePath);
+            if (asset != null && AssetDatabase.OpenAsset(asset, lineNumber))
+                return;
+
+            InternalEditorUtility.OpenFileAtLineExternal(GetPhysicalPath(filePath), lineNumber);
+        }
+
+        private static string GetPhysicalPath(string filePath)
+        {
+            if (System.IO.Path.IsPathRooted(filePath))
+                return filePath;
+
+            var package = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(filePath);
+            if (package != null && filePath.StartsWith(package.assetPath + "/"))
+                return System.IO.Path.Combine(package.resolvedPath, filePath.Substring(package.assetPath.Length + 1));
+
+            return System.IO.Path.GetFullPath(filePath);
         }
 
         // Finds the context object directly from its ID instead of searching every loaded scene.

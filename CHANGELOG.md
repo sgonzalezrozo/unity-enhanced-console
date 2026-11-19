@@ -4,6 +4,12 @@ All notable changes to this package are documented in this file.
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-11-19
+
+### Fixed
+
+- Clicking a stack trace line for a script in a package opens the real file. Project paths go through `AssetDatabase.OpenAsset`, like the Project window, and other paths are resolved to their location on disk. VS Code used to open an empty, unsaved buffer instead of the script.
+
 ## [0.3.5] - 2026-11-18
 
 ### Documentation
