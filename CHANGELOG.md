@@ -4,6 +4,12 @@ All notable changes to this package are documented in this file.
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-11-19
+
+### Documentation
+
+- The README version badge shows the current version; it had stayed at 0.3.5.
+
 ## [0.3.7] - 2026-11-19
 
 ### Changed
